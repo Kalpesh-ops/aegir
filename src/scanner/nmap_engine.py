@@ -61,17 +61,17 @@ class NmapScanner:
             
             if mode == "fast":
                 # Fast: Top 100 ports, no version detection
-                scan_args = "-sT -F"
+                scan_args = "-Pn -sT -F"
             elif mode == "deep":
                 # Deep: All ports with version detection and vulnerability scripts
-                scan_args = "-sT -sV --version-intensity 5 --script vuln"
+                scan_args = "-Pn -sT -sV --version-intensity 5 --script vuln"
             elif mode == "pen_test":
                 # Pen Testing: Version detection with extended probing, all ports (Windows-compatible)
                 # Note: Limiting to -sV with high intensity to avoid NSE compatibility issues on Windows
-                scan_args = "-sT -sV --version-intensity 9 -p-"
+                scan_args = "-Pn -sT -sV --version-intensity 9 -p-"
             else:
                 # Fallback for unknown modes
-                scan_args = "-sT -F"
+                scan_args = "-Pn -sT -F"
             
             logging.info(f"Executing: nmap {scan_args} {target}")
             
