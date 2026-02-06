@@ -41,7 +41,7 @@ The application is built on a modern **Full-Stack Architecture**:
 
 ```mermaid
 flowchart LR
-  A[Frontend (Vercel)] --> B[Backend (GCP VM)]
+  A["Frontend (Vercel)"] --> B["Backend (GCP VM)"]
   B --> C[Nmap Engine]
   C --> D[Gemini API]
   D --> E[Result / Report]
