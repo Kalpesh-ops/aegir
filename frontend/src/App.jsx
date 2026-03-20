@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Terminal, Shield, Activity, Lock, AlertTriangle, Download, FileText, Code, Layers, Server, Eye, Cpu, Globe, Zap } from 'lucide-react';
 import ParticleNetwork from './components/ParticleNetwork';
 import ReactMarkdown from 'react-markdown';
@@ -292,12 +292,12 @@ export default function App() {
                        {/* Custom Renderers to style the Markdown nicely */}
                        <ReactMarkdown
                           components={{
-                            h1: ({node, ...props}) => <div className="flex items-center gap-3 text-2xl font-bold text-cyber-neon mb-6 border-b border-cyber-neon/20 pb-2 uppercase tracking-widest"><Shield className="w-6 h-6"/> <span {...props}/></div>,
-                            h2: ({node, ...props}) => <div className="mt-8 mb-4 text-lg font-bold text-white flex items-center gap-2 border-l-4 border-cyber-neon pl-3 py-1 bg-cyber-neon/5"><span {...props}/></div>,
-                            strong: ({node, ...props}) => <span className="text-cyber-neon font-bold" {...props} />,
-                            ul: ({node, ...props}) => <ul className="grid grid-cols-1 gap-2 my-4" {...props} />,
-                            li: ({node, ...props}) => <li className="bg-gray-900/50 border border-gray-800 p-3 rounded text-sm text-gray-300 flex gap-2 before:content-['>'] before:text-cyber-neon" {...props} />,
-                            blockquote: ({node, ...props}) => <div className="border border-red-500/30 bg-red-900/10 p-4 rounded my-4 text-red-200 text-sm flex gap-3 items-start"><AlertTriangle className="shrink-0 w-5 h-5 text-red-500"/><div {...props}/></div>
+                            h1: (props) => <div className="flex items-center gap-3 text-2xl font-bold text-cyber-neon mb-6 border-b border-cyber-neon/20 pb-2 uppercase tracking-widest"><Shield className="w-6 h-6"/> <span {...props}/></div>,
+                            h2: (props) => <div className="mt-8 mb-4 text-lg font-bold text-white flex items-center gap-2 border-l-4 border-cyber-neon pl-3 py-1 bg-cyber-neon/5"><span {...props}/></div>,
+                            strong: (props) => <span className="text-cyber-neon font-bold" {...props} />,
+                            ul: (props) => <ul className="grid grid-cols-1 gap-2 my-4" {...props} />,
+                            li: (props) => <li className="bg-gray-900/50 border border-gray-800 p-3 rounded text-sm text-gray-300 flex gap-2 before:content-['>'] before:text-cyber-neon" {...props} />,
+                            blockquote: (props) => <div className="border border-red-500/30 bg-red-900/10 p-4 rounded my-4 text-red-200 text-sm flex gap-3 items-start"><AlertTriangle className="shrink-0 w-5 h-5 text-red-500"/><div {...props}/></div>
                           }}
                        >
                          {report}
