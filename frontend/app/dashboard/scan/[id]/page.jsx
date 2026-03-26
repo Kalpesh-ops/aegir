@@ -47,7 +47,8 @@ export default async function ScanResultPage({ params: paramsPromise }) {
 
   const ports = (() => {
     try {
-      const raw = scan.ports
+      // Fix: Check for ports_json first, fallback to ports
+      const raw = scan.ports_json || scan.ports 
       if (Array.isArray(raw)) return raw
       if (typeof raw === 'string') return JSON.parse(raw)
       if (raw && typeof raw === 'object') return Object.values(raw)
@@ -57,7 +58,8 @@ export default async function ScanResultPage({ params: paramsPromise }) {
 
   const cveFindings = (() => {
     try {
-      const raw = scan.cve_findings_json
+      // Fix: Apply the same bulletproof fallback here
+      const raw = scan.cve_findings_json || scan.cve_findings
       if (Array.isArray(raw)) return raw
       if (typeof raw === 'string') return JSON.parse(raw)
       if (raw && typeof raw === 'object') return Object.values(raw)
