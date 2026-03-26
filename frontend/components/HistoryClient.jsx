@@ -1,0 +1,482 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+
+function formatDate(ts) {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const mm = months[d.getMonth()]
+  const dd = String(d.getDate()).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  return `${mm} ${dd}, ${yyyy}`
+}
+
+function formatDateShort(ts) {
+  if (!ts) return '—'
+  const d = new Date(ts)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`
+}
+
+function parseCvss(cvss) {
+  if (cvss === null || cvss === undefined) return 0
+  return parseFloat(cvss) || 0
+}
+
+function parsePorts(ports) {
+  if (!ports) return 0
+  if (typeof ports === 'string') {
+    try { return JSON.parse(ports).length } catch { return 0 }
+  }
+  if (Array.isArray(ports)) return ports.length
+  return 0
+}
+
+function getRisk(cvss, cveCount) {
+  const score = parseCvss(cvss)
+  if (cveCount === 0) return 'clean'
+  if (score >= 9) return 'critical'
+  if (score >= 7) return 'high'
+  if (score >= 4) return 'medium'
+  return 'low'
+}
+
+const riskConfig = {
+  critical: { color: '#ff4560', bg: 'rgba(255,69,96,0.12)', label: 'Critical' },
+  high:     { color: '#ffb340', bg: 'rgba(255,179,64,0.12)', label: 'High' },
+  medium:   { color: '#4af4ff', bg: 'rgba(74,244,255,0.12)', label: 'Medium' },
+  low:       { color: '#00ff88', bg: 'rgba(0,255,136,0.08)', label: 'Low' },
+  clean:    { color: '#00ff88', bg: 'rgba(0,255,136,0.08)', label: 'Clean' },
+}
+
+const accentColors = {
+  critical: '#ff4560',
+  high:     '#ffb340',
+  medium:   '#4af4ff',
+  low:      'rgba(0,255,136,0.5)',
+  clean:    'rgba(240,237,232,0.15)',
+}
+
+const filterFilters = {
+  All: () => true,
+  Critical: (s) => parseCvss(s.highest_cvss) >= 9,
+  High:     (s) => parseCvss(s.highest_cvss) >= 7 && parseCvss(s.highest_cvss) < 9,
+  Medium:   (s) => parseCvss(s.highest_cvss) >= 4 && parseCvss(s.highest_cvss) < 7,
+  Low:      (s) => parseCvss(s.highest_cvss) < 4 && parseCvss(s.cve_count) > 0,
+  Clean:    (s) => s.cve_count === 0 || s.cve_count === null,
+}
+
+function ScanCard({ scan, index }) {
+  const router = useRouter()
+  const risk = getRisk(scan.highest_cvss, scan.cve_count)
+  const cfg = riskConfig[risk]
+  const accentColor = accentColors[risk]
+  const portCount = parsePorts(scan.ports)
+  const animDelay = Math.min(index * 40, 400)
+
+  return (
+    <div
+      onClick={() => router.push(`/dashboard/scan/${scan.id}`)}
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        padding: '24px',
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        animation: `fadeUp 0.4s cubic-bezier(0.16,1,0.3,1) ${animDelay}ms both`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
+        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'
+        e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
+    >
+      {/* Left accent bar */}
+      <div style={{
+        position: 'absolute',
+        left: 0, top: 0, bottom: 0,
+        width: '2px',
+        background: accentColor,
+      }} />
+
+      {/* Top row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '13px',
+          color: '#f0ede8',
+          paddingLeft: '8px',
+          wordBreak: 'break-all',
+        }}>
+          {scan.target_redacted || '—'}
+        </span>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '9px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          color: cfg.color,
+          background: cfg.bg,
+          border: `1px solid ${cfg.color}`,
+          padding: '3px 8px',
+          marginLeft: '8px',
+          flexShrink: 0,
+        }}>
+          {cfg.label}
+        </span>
+      </div>
+
+      {/* Date + CVE count */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', paddingLeft: '8px' }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '10px',
+          color: 'rgba(240,237,232,0.35)',
+        }}>
+          {formatDate(scan.scan_timestamp)}
+        </span>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '10px',
+          color: cfg.color,
+        }}>
+          {scan.cve_count ?? 0} CVEs
+        </span>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', marginBottom: '14px', marginLeft: '8px' }} />
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: '24px', paddingLeft: '8px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(240,237,232,0.3)' }}>CVSS</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', fontWeight: 500, color: cfg.color }}>
+            {parseCvss(scan.highest_cvss).toFixed(1)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(240,237,232,0.3)' }}>Ports</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', fontWeight: 500, color: 'rgba(240,237,232,0.6)' }}>
+            {portCount || '—'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(240,237,232,0.3)' }}>Status</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', fontWeight: 500, color: '#00ff88' }}>Complete</span>
+        </div>
+      </div>
+
+      {/* View Report */}
+      <div style={{ paddingLeft: '8px' }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '10px',
+          color: '#00ff88',
+          letterSpacing: '0.05em',
+        }}>
+          View Report →
+        </span>
+      </div>
+    </div>
+  )
+}
+
+const FILTERS = ['All', 'Critical', 'High', 'Medium', 'Low', 'Clean']
+
+export default function HistoryClient({ scans }) {
+  const router = useRouter()
+  const [activeFilter, setActiveFilter] = useState('All')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 20
+
+  const filtered = useMemo(() => {
+    let result = scans
+    if (activeFilter !== 'All') {
+      result = result.filter(filterFilters[activeFilter])
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter((s) =>
+        (s.target_redacted || '').toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [scans, activeFilter, search])
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE)
+  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+
+  const gridKey = `${activeFilter}-${search}`
+
+  const filterBtn = (f) => {
+    const isActive = activeFilter === f
+    const riskColor = f === 'All' ? '#00ff88'
+      : f === 'Critical' ? '#ff4560'
+      : f === 'High' ? '#ffb340'
+      : f === 'Medium' ? '#4af4ff'
+      : f === 'Low' ? 'rgba(240,237,232,0.3)'
+      : '#00ff88'
+    return {
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: '10px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+      padding: '8px 18px',
+      border: isActive ? `1px solid ${riskColor}` : '1px solid rgba(255,255,255,0.08)',
+      background: isActive ? `${riskColor}10` : 'transparent',
+      color: isActive ? riskColor : 'rgba(240,237,232,0.4)',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+    }
+  }
+
+  return (
+    <div>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+        <div>
+          <p style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.18em',
+            color: '#00ff88',
+            marginBottom: '8px',
+          }}>
+            Scan History
+          </p>
+          <h1 style={{
+            fontFamily: "'Syne', sans-serif",
+            fontWeight: 500,
+            fontSize: '40px',
+            color: '#f0ede8',
+            lineHeight: 1,
+            marginBottom: '8px',
+          }}>
+            All Scans
+          </h1>
+          <p style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '11px',
+            color: 'rgba(240,237,232,0.35)',
+          }}>
+            {scans.length} scans recorded
+          </p>
+        </div>
+        <input
+          type="text"
+          placeholder="Search by target..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            padding: '12px 16px',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '12px',
+            color: '#f0ede8',
+            outline: 'none',
+            width: '280px',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = 'rgba(0,255,136,0.5)'
+            e.target.style.boxShadow = '0 0 0 3px rgba(0,255,136,0.06)'
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = 'rgba(255,255,255,0.08)'
+            e.target.style.boxShadow = 'none'
+          }}
+        />
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '24px' }}>
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            style={filterBtn(f)}
+            onClick={() => { setActiveFilter(f); setPage(1) }}
+            onMouseEnter={(e) => {
+              if (activeFilter !== f) {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+                e.currentTarget.style.color = '#f0ede8'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeFilter !== f) {
+                const riskColor = f === 'All' ? '#00ff88'
+                  : f === 'Critical' ? '#ff4560'
+                  : f === 'High' ? '#ffb340'
+                  : f === 'Medium' ? '#4af4ff'
+                  : f === 'Low' ? 'rgba(240,237,232,0.3)'
+                  : '#00ff88'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                e.currentTarget.style.color = 'rgba(240,237,232,0.4)'
+              }
+            }}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Cards Grid */}
+      {scans.length === 0 ? (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          marginTop: '32px',
+        }}>
+          <p style={{
+            fontFamily: "'Syne', sans-serif",
+            fontWeight: 800,
+            fontSize: '120px',
+            color: 'rgba(240,237,232,0.06)',
+            lineHeight: 1,
+            marginBottom: '24px',
+          }}>
+            0
+          </p>
+          <p style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '12px',
+            color: 'rgba(240,237,232,0.3)',
+            marginBottom: '32px',
+          }}>
+            No scans recorded yet.
+          </p>
+          <Link href="/dashboard/scan" style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '11px',
+            fontWeight: 500,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: '#060608',
+            background: '#00ff88',
+            border: 'none',
+            padding: '14px 36px',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            clipPath: 'polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%)',
+          }}>
+            Run First Scan →
+          </Link>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px',
+          marginTop: '32px',
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '12px',
+          color: 'rgba(240,237,232,0.3)',
+        }}>
+          No scans match this filter.
+        </div>
+      ) : (
+        <>
+          <div key={gridKey} style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '12px',
+            marginTop: '24px',
+          }}>
+            {paginated.map((scan, i) => (
+              <ScanCard
+                key={scan.id}
+                scan={scan}
+                index={(page - 1) * PER_PAGE + i}
+              />
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '16px',
+              marginTop: '36px',
+              paddingBottom: '20px',
+            }}>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  padding: '8px 18px',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'transparent',
+                  color: page === 1 ? 'rgba(240,237,232,0.3)' : 'rgba(240,237,232,0.5)',
+                  cursor: page === 1 ? 'default' : 'pointer',
+                  opacity: page === 1 ? 0.3 : 1,
+                  pointerEvents: page === 1 ? 'none' : 'auto',
+                  transition: 'all 0.2s',
+                }}
+              >
+                ← Prev
+              </button>
+              <span style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px',
+                color: 'rgba(240,237,232,0.4)',
+              }}>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  padding: '8px 18px',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'transparent',
+                  color: page === totalPages ? 'rgba(240,237,232,0.3)' : 'rgba(240,237,232,0.5)',
+                  cursor: page === totalPages ? 'default' : 'pointer',
+                  opacity: page === totalPages ? 0.3 : 1,
+                  pointerEvents: page === totalPages ? 'none' : 'auto',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

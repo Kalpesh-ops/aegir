@@ -1,4 +1,3 @@
-import copy
 import time
 import json
 import logging
@@ -74,11 +73,6 @@ def run_worker() -> None:
                     {"ports": enriched, "cve_findings": cve_findings}
                 )
 
-                structured_for_storage = copy.deepcopy(structured_data)
-                structured_for_storage["target"] = "REDACTED_IP"
-                for host in structured_for_storage.get("hosts", []):
-                    host["ip"] = "REDACTED_IP"
-
                 ai_agent = GeminiAgent()
                 ai_summary = ai_agent.analyze_scan(
                     enriched_for_gemini["ports"],
@@ -86,8 +80,8 @@ def run_worker() -> None:
                 )
 
                 result = {
-                    "ports": structured_for_storage,
-                    "cve_findings": cve_findings,
+                    "ports": enriched_for_gemini["ports"],
+                    "cve_findings": enriched_for_gemini["cve_findings"],
                     "ai_summary": ai_summary,
                 }
 

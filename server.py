@@ -22,6 +22,7 @@ from src.scanner.nmap_engine import NmapScanner
 from src.scanner.scapy_engine import ScapyEngine
 from src.scanner.tshark_engine import TSharkScanner
 from src.ai_agent.gemini_client import GeminiAgent
+from src.vuln_lookup.circl_client import CIRCLClient
 from src.utils.data_sanitizer import sanitize_scan_data
 from src.utils.token_optimizer import prune_scan_data
 from src.queue.job_manager import create_job, get_job_status
@@ -66,7 +67,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://netsec-ai-scanner.vercel.app"],
+    allow_origins=[
+        "https://netsec-ai-scanner.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -97,6 +102,8 @@ nmap_engine = NmapScanner()
 scapy_engine = ScapyEngine()
 tshark_engine = TSharkScanner()
 ai_agent = GeminiAgent()
+circl_client = CIRCLClient()
+logging.info(f"CIRCL API reachable: {circl_client.test_connection()}")
 
 
 # --- ENUMS ---

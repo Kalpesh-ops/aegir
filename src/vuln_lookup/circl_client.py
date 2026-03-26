@@ -3,6 +3,7 @@ import sqlite3
 import time
 import requests
 import logging
+import socket
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -11,6 +12,11 @@ logging.basicConfig(
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 CACHE_DB = os.path.join(CACHE_DIR, "cve_cache.db")
 CACHE_TTL_DAYS = 7
+
+CIRCL_URLS = [
+    "https://cve.circl.lu/api/search",
+    "https://vulnerability.circl.lu/api/search",
+]
 
 
 def _get_cache_conn() -> sqlite3.Connection:
@@ -26,7 +32,29 @@ def _get_cache_conn() -> sqlite3.Connection:
 
 
 class CIRCLClient:
-    BASE_URL = "https://cve.circl.lu/api/search"
+    def __init__(self):
+        self.api_base = self._resolve_api_base()
+
+    def _resolve_api_base(self) -> str:
+        """Resolve API base URL with DNS fallback."""
+        hostnames = ["cve.circl.lu", "vulnerability.circl.lu"]
+        for hostname in hostnames:
+            try:
+                socket.getaddrinfo(hostname, 443)
+                return f"https://{hostname}/api/search"
+            except socket.gaierror:
+                continue
+        logging.warning("CIRCL DNS resolution failed for all hostnames, using default")
+        return CIRCL_URLS[0]
+
+    def test_connection(self) -> bool:
+        """Test if CIRCL API is reachable."""
+        try:
+            base = self.api_base.replace("/search", "")
+            r = requests.get(f"{base}/dbInfo", timeout=10)
+            return r.status_code == 200
+        except Exception:
+            return False
 
     def lookup_cves(self, service: str, version: str) -> list:
         """
@@ -40,7 +68,7 @@ class CIRCLClient:
         Returns:
             List of dicts with keys: cve_id, cvss, summary.
             Top 5 results sorted by cvss descending.
-            Returns [] on timeout (5 seconds), empty response, or error.
+            Returns [] on timeout (15 seconds), empty response, or error.
         """
         if version == "unknown":
             return []
@@ -54,15 +82,24 @@ class CIRCLClient:
         return result
 
     def _fetch_cves(self, service: str, version: str) -> list:
-        """Call the CIRCL API and return parsed CVE results."""
-        try:
-            url = f"{self.BASE_URL}/{service}/{version}"
-            response = requests.get(url, timeout=5)
-            response.raise_for_status()
-        except requests.Timeout:
-            logging.warning(f"CIRCL API timeout for {service}/{version}")
-            return []
-        except Exception:
+        """Call the CIRCL API with fallback URLs and return parsed CVE results."""
+        for base_url in CIRCL_URLS:
+            try:
+                url = f"{base_url}/{service}/{version}"
+                response = requests.get(url, timeout=15)
+                response.raise_for_status()
+                break
+            except requests.Timeout:
+                logging.warning(
+                    f"CIRCL API timeout for {service}/{version} at {base_url}"
+                )
+                continue
+            except Exception:
+                continue
+        else:
+            logging.warning(
+                f"CIRCL API failed for {service}/{version} after trying all URLs"
+            )
             return []
 
         try:

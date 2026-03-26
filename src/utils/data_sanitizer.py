@@ -118,20 +118,22 @@ def sanitize_scan_data(scan_data, target=None):
 
 def redact_enriched_scan(data: dict) -> dict:
     """
-    Redact PII from enriched scan results while preserving CVE data intact.
+    Redact PII from enriched scan results while preserving CVE and port data intact.
 
-    Redacts:
-      - The "target" field: replaced with "REDACTED_IP"
-      - Hostname fields: replaced with "REDACTED_HOST"
-      - MAC addresses: replaced with "REDACTED_MAC"
+    Redacts only:
+      - "target" field (top-level string): replaced with "REDACTED_IP"
+      - "hostname" / "hostnames" string fields: replaced with "REDACTED_HOST"
+      - "mac_address" string fields: replaced with "REDACTED_MAC"
 
-    Preserves (not modified):
-      - Port numbers, service names, product, version, state
-      - All fields inside "cves" arrays: cve_id, cvss, summary
+    Preserves unchanged (no string scanning):
+      - All port object fields: port, protocol, service, product, version, state,
+        cves, cvss, summary, description, cve_id, and every other field
+      - All CVE object fields
+      - All nested arrays and objects not listed above
 
     Args:
-        data: Enriched scan result dict with optional "target", "hosts", and
-            "cve_findings" keys.
+        data: dict with optional "ports" (list of port objects) and
+            "cve_findings" (list of CVE objects) keys.
 
     Returns:
         A deeply redacted copy of data. The original is not mutated.
@@ -140,22 +142,22 @@ def redact_enriched_scan(data: dict) -> dict:
 
     mac_pattern = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", re.IGNORECASE)
 
-    def redact_str(value: str) -> str:
-        return mac_pattern.sub("[REDACTED_MAC]", value)
-
     def walk(obj: any) -> None:
         if isinstance(obj, dict):
             for key, value in obj.items():
-                if key == "cves":
+                # Skip ports arrays and CVE data entirely
+                if key in ("ports", "cves"):
                     continue
+                # Redact specific known sensitive fields
                 if key == "target" and isinstance(value, str):
                     obj[key] = "REDACTED_IP"
-                elif key in ("hostname", "hostnames"):
+                elif key in ("hostname", "hostnames") and isinstance(value, str):
                     obj[key] = "REDACTED_HOST"
-                elif isinstance(value, str):
-                    obj[key] = redact_str(value)
-                else:
+                elif key == "mac_address" and isinstance(value, str):
+                    obj[key] = mac_pattern.sub("[REDACTED_MAC]", value)
+                elif isinstance(value, (dict, list)):
                     walk(value)
+                # Leave all other string values untouched
         elif isinstance(obj, list):
             for item in obj:
                 walk(item)
