@@ -229,8 +229,10 @@ export default function ScanPage() {
       try {
         const res = await pollScan(token, scanIdVal)
         if (res.status === 'running') {
-          const msg = scanMessages[count % scanMessages.length]
-          addLog('info', 'SCAN', msg)
+          // FIX: Stop looping infinitely. Only print the 4 sequence messages once.
+          if (count <= scanMessages.length) {
+            addLog('info', 'SCAN', scanMessages[count - 1])
+          }
           if (count >= 40) {
             clearInterval(pollIntervalRef.current)
             setPhase('failed')
@@ -238,16 +240,22 @@ export default function ScanPage() {
           }
         } else if (res.status === 'complete') {
           clearInterval(pollIntervalRef.current)
+          
           const rawPorts = res.result_json?.ports
           const portData = Array.isArray(rawPorts) ? rawPorts : (rawPorts ? Object.values(rawPorts) : [])
-          console.log('PORT DATA STRUCTURE:', JSON.stringify(portData[0], null, 2))
+          
           const rawCves = res.result_json?.cve_findings
           const cveData = Array.isArray(rawCves) ? rawCves : (rawCves ? Object.values(rawCves) : [])
-          const flatCves = portData.flatMap((p) => p.cve_findings || [])
+          
+          // FIX: Use cveData (which contains the top-level CVE array from the backend). 
+          // If we must extract from ports fallback, look for 'p.cves', NOT 'p.cve_findings'
+          const finalCves = cveData.length > 0 ? cveData : portData.flatMap((p) => p.cves || [])
+          
           setPorts(portData)
-          setCveFindings(flatCves)
+          setCveFindings(finalCves)
+          
           addLog('ok', 'DONE', `Scan complete — ${portData.length} ports found`)
-          addLog('info', 'CVE', `${flatCves.length} CVEs correlated`)
+          addLog('info', 'CVE', `${finalCves.length} CVEs correlated`)
           setPhase('analyzing')
         } else if (res.status === 'failed') {
           clearInterval(pollIntervalRef.current)

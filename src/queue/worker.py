@@ -19,24 +19,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
 def run_worker() -> None:
-    """
-    Long-running worker loop that processes scan jobs from the queue.
-
-    Each iteration:
-      1. Fetch the oldest queued job via get_next_job().
-      2. Mark it running.
-      3. Execute the full pipeline:
-         a. Nmap scan
-         b. CVE enrichment (CIRCL)
-         c. Data sanitization
-         d. AI analysis (Gemini)
-      4. Store the result with mark_complete() or the error with mark_failed().
-      5. Sleep 3 seconds and repeat.
-
-    The outer loop never crashes.
-    """
     scanner = NmapScanner()
     circl = CIRCLClient()
 
@@ -60,14 +43,19 @@ def run_worker() -> None:
                     raise Exception(scan_result["error"])
 
                 xml_output = scan_result["xml"]
-                structured_data = scan_result["data"]
-
+                
                 ports = scanner.parse_ports_from_xml(xml_output)
                 enriched = circl.enrich_services(ports)
 
-                cve_findings = [
-                    cve for port in enriched for cve in port.get("cves", [])
-                ]
+                # FIX: Flatten CVEs and inject port/service details for the frontend table
+                cve_findings = []
+                for port in enriched:
+                    for cve in port.get("cves", []):
+                        cve_copy = dict(cve)
+                        cve_copy["port"] = port.get("portid") or port.get("port") or port.get("port_number")
+                        cve_copy["protocol"] = port.get("protocol") or port.get("proto")
+                        cve_copy["service"] = port.get("service") or port.get("service_name") or port.get("name")
+                        cve_findings.append(cve_copy)
 
                 enriched_for_gemini = redact_enriched_scan(
                     {"ports": enriched, "cve_findings": cve_findings}
