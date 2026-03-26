@@ -39,13 +39,14 @@ class NmapScanner:
     def _build_args(self, mode: str) -> str:
         """Return Nmap arguments string for a given scan mode."""
         if mode == "fast":
-            return "-Pn -sT -F"
+            # FIX: Added -sV --version-intensity 5 so product/version are detected
+            return "-Pn -sT -F -sV --version-intensity 5"
         elif mode == "deep":
             return "-Pn -sT -sV --version-intensity 5 --script vuln"
         elif mode == "pen_test":
             return "-Pn -sT -sV --version-intensity 9 -p-"
         else:
-            return "-Pn -sT -F"
+            return "-Pn -sT -F -sV --version-intensity 5"
 
     def parse_ports_from_xml(self, xml_output: str) -> list:
         """
