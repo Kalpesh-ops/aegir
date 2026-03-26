@@ -29,6 +29,7 @@ venv/
 ENV/
 env/
 .venv/
+.env.test
 
 # Environment variables
 .env
@@ -88,3 +89,9 @@ htmlcov/
 # Packet captures
 *.pcap
 *.pcapng
+
+#Next js
+.next/
+
+#Local Data
+data/*
