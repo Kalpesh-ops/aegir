@@ -67,6 +67,7 @@ export default function SidebarNav() {
             <Link
               key={href}
               href={href}
+              prefetch={true}
               style={{
                 display: 'flex',
                 alignItems: 'center',
