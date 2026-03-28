@@ -1,8 +1,11 @@
 import json
 import os
+import logging
 from datetime import datetime, timezone
 from supabase import create_client, Client
 from supabase.lib.client_options import SyncClientOptions
+
+logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
@@ -65,3 +68,29 @@ def get_user_scans(user_id: str) -> list[dict]:
         .execute()
         .data
     )
+
+def get_global_cached_report(signature: str) -> str:
+    """Pulls a cached AI report from the global Supabase hive mind."""
+    try:
+        client = _get_client() # <-- Changed to match your existing function
+        response = client.table("global_ai_cache").select("report_text").eq("signature", signature).execute()
+        
+        if response.data and len(response.data) > 0:
+            return response.data[0]["report_text"]
+        return None
+    except Exception as e:
+        logger.warning(f"[Supabase] Global cache read failed: {e}")
+        return None
+
+def store_global_cached_report(signature: str, report_text: str):
+    """Pushes a newly generated AI report to the global cache for other users."""
+    try:
+        client = _get_client() # <-- Changed to match your existing function
+        client.table("global_ai_cache").insert({
+            "signature": signature,
+            "report_text": report_text
+        }).execute()
+        logger.info(f"[Supabase] Successfully pushed report to global cache")
+    except Exception as e:
+        # If it fails (e.g., someone else inserted it at the exact same time), it's fine.
+        logger.warning(f"[Supabase] Global cache write skipped/failed: {e}")

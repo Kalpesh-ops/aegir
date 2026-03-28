@@ -1,108 +1,137 @@
-# Logic for Google Gemini API
-# src/ai_agent/gemini_client.py
-
 import os
 import json
 import logging
+import sqlite3
+import hashlib
+from pathlib import Path
+from typing import List, Dict
+
+from src.database.supabase_client import get_global_cached_report, store_global_cached_report
+
 import google.generativeai as genai
-from dotenv import load_dotenv
-from google.generativeai.types import helper_types
+from .prompts import get_analysis_prompt
 
-# Try relative import, fallback to absolute for testing
-try:
-    from .prompts import SYSTEM_PROMPT
-except ImportError:
-    from prompts import SYSTEM_PROMPT
+logger = logging.getLogger(__name__)
 
-load_dotenv()
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
+CACHE_DB = Path("data/ai_cache.db")
 
 class GeminiAgent:
     def __init__(self):
         self.api_key = os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
-            logging.error("GOOGLE_API_KEY not found in .env file.")
-            raise ValueError("Missing API Key")
+            logger.error("GOOGLE_API_KEY environment variable not set.")
+            raise ValueError("GOOGLE_API_KEY is required for GeminiAgent.")
 
         genai.configure(api_key=self.api_key)
-
-        # UPDATED MODEL LIST based on your check_models.py output
-        # We prioritize 2.5 Flash for speed/quality, then fall back to 2.0
-        self.preferred_models = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-flash-latest",
-            "gemini-pro-latest",
-        ]
-
-        self.model = None
-        self._initialize_model()
-
-    def _initialize_model(self):
-        """
-        Iterates through preferred models and initializes the first one that works.
-        """
-        for model_name in self.preferred_models:
-            try:
-                logging.info(f"Attempting to initialize model: {model_name}")
-                self.model = genai.GenerativeModel(
-                    model_name=model_name, system_instruction=SYSTEM_PROMPT
-                )
-                self.current_model_name = model_name
-                logging.info(f"Selected Model: {model_name}")
-                return
-            except Exception as e:
-                logging.warning(f"Failed to init {model_name}: {e}")
-                continue
-
-        # If all precise names fail, try a generic fallback
+        self.model_name = "gemini-2.5-flash"
+        
         try:
-            self.model = genai.GenerativeModel("gemini-pro")
-            self.current_model_name = "gemini-pro (fallback)"
-        except Exception as init_err:
-            raise RuntimeError(
-                f"Could not initialize any Gemini models. Check API Key."
-            ) from init_err
-
-    def analyze_scan(self, ports: list, cve_findings: list) -> str:
-        """
-        Send scan data to Gemini for plain-English analysis.
-
-        Args:
-            ports: List of detected services (from parse_ports_from_xml).
-            cve_findings: List of CVE dicts from CIRCL enrichment.
-
-        Returns:
-            AI-generated report text, or error string on failure.
-        """
-        try:
-            payload = {"ports": ports, "cve_findings": cve_findings}
-            scan_json_str = json.dumps(payload, indent=2)
-
-            logging.info(f"Sending data to {self.current_model_name}...")
-
-            response = self.model.generate_content(
-                f"Here is the scan data: \n\n{scan_json_str}",
-                request_options=helper_types.RequestOptions(timeout=60),
-            )
-            return response.text
-
+            self.model = genai.GenerativeModel(self.model_name)
+            logger.info(f"Initialized Gemini model: {self.model_name}")
         except Exception as e:
-            logging.error(f"AI Analysis Failed: {e}")
-            return f"Error during analysis: {str(e)}"
+            logger.error(f"Failed to initialize Gemini model: {e}")
+            raise
+            
+        self._init_cache()
 
+    def _init_cache(self):
+        """Initializes the local SQLite cache for AI reports."""
+        CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(CACHE_DB)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ai_reports (
+                signature TEXT PRIMARY KEY,
+                report_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
 
-if __name__ == "__main__":
-    # Test Block
-    mock_scan_file = "logs/temp_scans/latest_scan.json"
-    if os.path.exists(mock_scan_file):
-        with open(mock_scan_file, "r") as f:
-            scan_data = json.load(f)
+    def _generate_signature(self, ports: List[Dict], cves: List[Dict]) -> str:
+        """
+        Generates a privacy-safe SHA-256 hash of the vulnerability profile.
+        Strips all IPs, timestamps, and user data. Sorts data to ensure consistent hashes.
+        """
+        # Extract only the generic technical details
+        profile = []
+        for p in ports:
+            port_num = p.get("portid") or p.get("port") or p.get("port_number", "0")
+            service = p.get("service", "unknown")
+            product = p.get("product", "unknown")
+            profile.append(f"{port_num}:{service}:{product}")
+            
+        cve_list = [c.get("cve_id", "") for c in cves if c.get("cve_id")]
+        
+        # Sort to ensure identical setups generate the exact same hash regardless of array order
+        profile.sort()
+        cve_list.sort()
+        
+        signature_data = f"PORTS:{'|'.join(profile)}||CVES:{'|'.join(cve_list)}"
+        return hashlib.sha256(signature_data.encode('utf-8')).hexdigest()
 
-        agent = GeminiAgent()
-        print(agent.analyze_scan(scan_data))
-    else:
-        print("Run nmap_engine.py first to generate data.")
+    def _get_cached_report(self, signature: str) -> str:
+        """Retrieves a report from the local cache."""
+        try:
+            conn = sqlite3.connect(CACHE_DB)
+            cursor = conn.cursor()
+            cursor.execute("SELECT report_text FROM ai_reports WHERE signature = ?", (signature,))
+            row = cursor.fetchone()
+            conn.close()
+            return row[0] if row else None
+        except Exception as e:
+            logger.warning(f"Cache read error: {e}")
+            return None
+
+    def _cache_report(self, signature: str, report_text: str):
+        """Saves a generated report to the local cache."""
+        try:
+            conn = sqlite3.connect(CACHE_DB)
+            conn.execute(
+                "INSERT OR REPLACE INTO ai_reports (signature, report_text) VALUES (?, ?)",
+                (signature, report_text)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Cache write error: {e}")
+
+    def analyze_scan(self, ports: List[Dict], cves: List[Dict]) -> str:
+        """
+        Analyzes scan results cascading through: 
+        1. Local SQLite -> 2. Global Supabase -> 3. Gemini API
+        """
+        signature = self._generate_signature(ports, cves)
+        logger.info(f"Scan Signature Generated: {signature[:8]}...")
+
+        # Tier 1: Check Local SQLite Cache (0ms latency, 0 API cost)
+        cached_report = self._get_cached_report(signature)
+        if cached_report:
+            logger.info("[✓] AI Report retrieved from LOCAL cache")
+            return cached_report
+
+        # Tier 2: Check Global Supabase Cache (Network latency, 0 API cost)
+        global_report = get_global_cached_report(signature)
+        if global_report:
+            logger.info("[✓] AI Report retrieved from GLOBAL cache")
+            self._cache_report(signature, global_report) # Save locally for next time
+            return global_report
+
+        # Tier 3: Fallback to Gemini API (API cost incurred)
+        logger.info("Signature not found globally. Sending data to Gemini...")
+        prompt = get_analysis_prompt(ports, cves)
+
+        try:
+            response = self.model.generate_content(prompt)
+            report_text = response.text
+            
+            # Save to both caches for future use
+            self._cache_report(signature, report_text)
+            store_global_cached_report(signature, report_text)
+            
+            logger.info("[✓] AI analysis complete and cached globally")
+            return report_text
+            
+        except Exception as e:
+            logger.error(f"Gemini API Error: {e}")
+            return "Error: Could not generate AI analysis. The service may be temporarily unavailable or rate-limited."
