@@ -109,22 +109,21 @@ export default function DashboardClient({ scans }) {
   }, [scans])
 
   const severityData = useMemo(() => {
-    const buckets = { Critical: 0, High: 0, Medium: 0, Low: 0 }
-    scans.forEach((scan) => {
-      try {
-        const cves = typeof scan.cve_findings_json === 'string'
-          ? JSON.parse(scan.cve_findings_json)
-          : (scan.cve_findings_json || [])
-        cves.forEach((cve) => {
-          const score = parseCvss(cve.cvss)
-          if (score >= 9) buckets.Critical++
-          else if (score >= 7) buckets.High++
-          else if (score >= 4) buckets.Medium++
-          else buckets.Low++
-        })
-      } catch (_) {}
+    let crit = 0, high = 0, med = 0, low = 0
+
+    scans.forEach(scan => {
+      crit += (scan.crit_count || 0)
+      high += (scan.high_count || 0)
+      med += (scan.med_count || 0)
+      low += (scan.low_count || 0)
     })
-    return Object.entries(buckets).map(([name, count]) => ({ name, count }))
+
+    return [
+      { name: 'Critical', count: crit, fill: '#ff4560' },
+      { name: 'High', count: high, fill: '#ffb340' },
+      { name: 'Medium', count: med, fill: '#4af4ff' },
+      { name: 'Low', count: low, fill: 'rgba(0,255,136,0.5)' },
+    ]
   }, [scans])
 
   const trendData = useMemo(() => {

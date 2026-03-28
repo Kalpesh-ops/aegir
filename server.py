@@ -13,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from src.queue.job_manager import clear_user_jobs
 
 import logging
 
@@ -25,7 +26,7 @@ from src.ai_agent.gemini_client import GeminiAgent
 from src.vuln_lookup.circl_client import CIRCLClient
 from src.utils.data_sanitizer import sanitize_scan_data
 from src.utils.token_optimizer import prune_scan_data
-from src.queue.job_manager import create_job, get_job_status
+from src.queue.job_manager import clear_user_jobs, create_job, get_job_status
 from src.auth.middleware import get_current_user
 from src.database.supabase_client import get_user_scans
 
@@ -191,6 +192,8 @@ class ScanRequest(BaseModel):
 
 class ScanQueueRequest(BaseModel):
     target: str
+    scan_mode: ScanMode = ScanMode.fast
+    scan_type: ScanMode | None = None
 
 
 # --- FIREWALL ANALYSIS HELPERS ---
@@ -439,8 +442,15 @@ async def run_scan(
         )
     try:
         validate_target(body.target)
-        job_id = create_job(user_id, body.target)
-        logging.info(f"[*] Scan queued: job={job_id} target={body.target}")
+        requested_mode = body.scan_mode
+        # Backward compatibility for older frontend bundles still sending scan_type.
+        if "scan_mode" not in body.model_fields_set and body.scan_type is not None:
+            requested_mode = body.scan_type
+
+        job_id = create_job(user_id, body.target, requested_mode.value)
+        logging.info(
+            f"[*] Scan queued: job={job_id} target={body.target} mode={requested_mode.value}"
+        )
         return {
             "scan_id": job_id,
             "status": "queued",
@@ -478,6 +488,15 @@ async def list_user_scans(user_id: str = Depends(get_current_user)):
     """Return the last 10 scans for the authenticated user."""
     return get_user_scans(user_id)
 
+@app.delete("/api/scans")
+async def delete_user_scans(user_id: str = Depends(get_current_user)):
+    """Clear all local scan history for the authenticated user."""
+    try:
+        clear_user_jobs(user_id)
+        return {"status": "success", "message": "Local history cleared"}
+    except Exception as e:
+        logging.error(f"[!] Delete history error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear local history")
 
 @app.post("/api/analyze")
 async def analyze_scan(request: Request, data: dict):
