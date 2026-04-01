@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardClient from '@/components/DashboardClient'
-import { scanCache } from '@/lib/localCache' // <-- Add this import
+import { scanCache } from '@/lib/localCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,27 +26,26 @@ export default async function DashboardPage() {
       },
     }
   )
-  const { data: { session }, error } = await supabase.auth.getSession()
-  const user = session?.user
   
+  const { data: { session }, error } = await supabase.auth.getSession()
+
   if (!user || error) {
     redirect('/login')
   }
 
-  // --- NEW CACHE LOGIC ---
+  // Use let, and ensure no other 'scans' variable exists in this function
   let scans = scanCache.get(user.id, 50)
 
   if (!scans) {
-    // Cache miss or expired: Fetch from database
     const { data } = await supabase
       .from('scans')
-      .select('id, target_redacted, scan_timestamp, cve_count, highest_cvss')
+      .select('id, target_redacted, scan_timestamp, cve_count, highest_cvss, crit_count, high_count, med_count, low_count')
       .eq('user_id', user.id)
       .order('scan_timestamp', { ascending: false })
       .limit(50)
       
     scans = data || []
-    scanCache.set(user.id, 50, scans) // Save to cache
+    scanCache.set(user.id, 50, scans)
   }
 
   return <DashboardClient scans={scans} />

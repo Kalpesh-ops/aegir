@@ -29,6 +29,7 @@ from src.utils.token_optimizer import prune_scan_data
 from src.queue.job_manager import clear_user_jobs, create_job, get_job_status
 from src.auth.middleware import get_current_user
 from src.database.supabase_client import get_user_scans
+from src.database.consent_manager import has_valid_consent, save_consent, revoke_consent
 
 # --- Simple in-memory rate limiters ---
 _scan_rate_lock = threading.Lock()
@@ -74,7 +75,7 @@ app.add_middleware(
         "http://localhost:3001",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
@@ -497,6 +498,31 @@ async def delete_user_scans(user_id: str = Depends(get_current_user)):
     except Exception as e:
         logging.error(f"[!] Delete history error: {e}")
         raise HTTPException(status_code=500, detail="Failed to clear local history")
+
+class ConsentRequest(BaseModel):
+    app_version: str = "1.0"
+
+@app.get("/api/consent")
+async def check_consent(user_id: str = Depends(get_current_user)):
+    """Check if user has valid consent for advanced scan modes."""
+    return {"has_consent": has_valid_consent(user_id)}
+
+@app.post("/api/consent")
+async def grant_consent(
+    request: Request,
+    body: ConsentRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """Record explicit user consent for advanced scan modes."""
+    client_ip = request.client.host if request.client else "unknown"
+    save_consent(user_id, client_ip, body.app_version)
+    return {"success": True}
+
+@app.delete("/api/consent")
+async def revoke_user_consent(user_id: str = Depends(get_current_user)):
+    """Revoke user consent — blocks access to advanced modes."""
+    revoke_consent(user_id)
+    return {"success": True}
 
 @app.post("/api/analyze")
 async def analyze_scan(request: Request, data: dict):
