@@ -6,10 +6,21 @@ import hashlib
 from pathlib import Path
 from typing import List, Dict
 
+from dotenv import load_dotenv
+import google.generativeai as genai
+from google.generativeai.types import helper_types
+
 from src.database.supabase_client import get_global_cached_report, store_global_cached_report
 
-import google.generativeai as genai
-from .prompts import get_analysis_prompt
+# Handle prompt import safely
+try:
+    from .prompts import SYSTEM_PROMPT
+except ImportError:
+    from prompts import SYSTEM_PROMPT
+
+# CRITICAL: Load environment variables BEFORE any class initialization
+# This ensures GOOGLE_API_KEY is available when server.py instantiates GeminiAgent
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +30,36 @@ class GeminiAgent:
     def __init__(self):
         self.api_key = os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
-            logger.error("GOOGLE_API_KEY environment variable not set.")
-            raise ValueError("GOOGLE_API_KEY is required for GeminiAgent.")
+            logger.error("GOOGLE_API_KEY not found in environment variables.")
+            raise ValueError("Missing GOOGLE_API_KEY")
 
         genai.configure(api_key=self.api_key)
-        self.model_name = "gemini-2.5-flash"
-        
-        try:
-            self.model = genai.GenerativeModel(self.model_name)
-            logger.info(f"Initialized Gemini model: {self.model_name}")
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini model: {e}")
-            raise
-            
+
+        # Restored original robust model fallback logic
+        self.preferred_models = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-flash-latest",
+            "gemini-pro-latest",
+        ]
+
+        self.model = None
+        self.current_model_name = None
+        self._initialize_model()
         self._init_cache()
+
+    def _initialize_model(self):
+        """Iterates through preferred models and initializes the first one that works."""
+        for model_name in self.preferred_models:
+            try:
+                self.model = genai.GenerativeModel(model_name)
+                self.current_model_name = model_name
+                logger.info(f"Initialized Gemini model: {self.current_model_name}")
+                return
+            except Exception as e:
+                logger.warning(f"Could not init {model_name}: {e}")
+        
+        raise RuntimeError("Could not initialize any Gemini models. Check API Key.")
 
     def _init_cache(self):
         """Initializes the local SQLite cache for AI reports."""
@@ -53,7 +80,6 @@ class GeminiAgent:
         Generates a privacy-safe SHA-256 hash of the vulnerability profile.
         Strips all IPs, timestamps, and user data. Sorts data to ensure consistent hashes.
         """
-        # Extract only the generic technical details
         profile = []
         for p in ports:
             port_num = p.get("portid") or p.get("port") or p.get("port_number", "0")
@@ -63,7 +89,6 @@ class GeminiAgent:
             
         cve_list = [c.get("cve_id", "") for c in cves if c.get("cve_id")]
         
-        # Sort to ensure identical setups generate the exact same hash regardless of array order
         profile.sort()
         cve_list.sort()
         
@@ -104,25 +129,32 @@ class GeminiAgent:
         signature = self._generate_signature(ports, cves)
         logger.info(f"Scan Signature Generated: {signature[:8]}...")
 
-        # Tier 1: Check Local SQLite Cache (0ms latency, 0 API cost)
+        # Tier 1: Check Local SQLite Cache
         cached_report = self._get_cached_report(signature)
         if cached_report:
             logger.info("[✓] AI Report retrieved from LOCAL cache")
             return cached_report
 
-        # Tier 2: Check Global Supabase Cache (Network latency, 0 API cost)
+        # Tier 2: Check Global Supabase Cache
         global_report = get_global_cached_report(signature)
         if global_report:
             logger.info("[✓] AI Report retrieved from GLOBAL cache")
             self._cache_report(signature, global_report) # Save locally for next time
             return global_report
 
-        # Tier 3: Fallback to Gemini API (API cost incurred)
-        logger.info("Signature not found globally. Sending data to Gemini...")
-        prompt = get_analysis_prompt(ports, cves)
+        # Tier 3: Fallback to Gemini API
+        logger.info(f"Signature not found globally. Sending data to {self.current_model_name}...")
+        
+        # Restored original prompt construction
+        payload = {"ports": ports, "cve_findings": cves}
+        scan_json_str = json.dumps(payload, indent=2)
+        prompt = f"{SYSTEM_PROMPT}\n\nHere is the scan data: \n\n{scan_json_str}"
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.model.generate_content(
+                prompt,
+                request_options=helper_types.RequestOptions(timeout=60)
+            )
             report_text = response.text
             
             # Save to both caches for future use
@@ -134,4 +166,4 @@ class GeminiAgent:
             
         except Exception as e:
             logger.error(f"Gemini API Error: {e}")
-            return "Error: Could not generate AI analysis. The service may be temporarily unavailable or rate-limited."
+            return f"Error: Could not generate AI analysis. {str(e)}"

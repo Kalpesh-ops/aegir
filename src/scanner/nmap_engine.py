@@ -42,7 +42,7 @@ class NmapScanner:
             # FIX: Added -sV --version-intensity 5 so product/version are detected
             return "-Pn -sT -F -sV --version-intensity 5"
         elif mode == "deep":
-            return "-Pn -sT -sV --version-intensity 5 --script vuln"
+            return "-Pn -sT -sV --version-intensity 5 --script=default"
         elif mode == "pen_test":
             return "-Pn -sT -sV --version-intensity 9 -p-"
         else:

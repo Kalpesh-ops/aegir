@@ -28,6 +28,24 @@ function getSupabase() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+async function checkConsent(token) {
+  const res = await fetch(`${API_URL}/api/consent`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return false
+  const data = await res.json()
+  return data.has_consent === true
+}
+
+async function grantConsent(token) {
+  const res = await fetch(`${API_URL}/api/consent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ app_version: '1.0' }),
+  })
+  return res.ok
+}
+
 async function startScan(token, target, scanMode) {
   const res = await fetch(`${API_URL}/api/scan`, {
     method: 'POST',
@@ -35,7 +53,7 @@ async function startScan(token, target, scanMode) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ target, scan_type: scanMode }),
+    body: JSON.stringify({ target, scan_mode: scanMode }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
@@ -145,6 +163,10 @@ export default function ScanPage() {
   const [results, setResults] = useState(null)
   const [ports, setPorts] = useState([])
   const [cveFindings, setCveFindings] = useState([])
+  const [hasConsent, setHasConsent] = useState(null) // null=loading, true/false
+  const [showConsentModal, setShowConsentModal] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false) // checkbox state
+  const [pendingScanMode, setPendingScanMode] = useState(null)
 
   useEffect(() => {
     if (logBodyRef.current) {
@@ -156,6 +178,16 @@ export default function ScanPage() {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    async function fetchConsent() {
+      const { data: { session } } = await getSupabase().auth.getSession()
+      if (!session) return
+      const result = await checkConsent(session.access_token)
+      setHasConsent(result)
+    }
+    fetchConsent()
   }, [])
 
   function addLog(tagType, tag, message) {
@@ -233,10 +265,12 @@ export default function ScanPage() {
           if (count <= scanMessages.length) {
             addLog('info', 'SCAN', scanMessages[count - 1])
           }
-          if (count >= 40) {
+          const timeoutPolls = scanMode === 'pen_test' ? 240 : scanMode === 'deep' ? 100 : 40
+          if (count >= timeoutPolls) {
             clearInterval(pollIntervalRef.current)
             setPhase('failed')
-            addLog('err', 'TIMEOUT', 'Scan timed out after 2 minutes')
+            const mins = Math.round((timeoutPolls * 3) / 60)
+            addLog('err', 'TIMEOUT', `Scan timed out after ${mins} minutes`)
           }
         } else if (res.status === 'complete') {
           clearInterval(pollIntervalRef.current)
@@ -458,8 +492,28 @@ export default function ScanPage() {
                   </p>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" style={modeBtn('fast')} onClick={() => setScanMode('fast')}>Fast</button>
-                    <button type="button" style={modeBtn('deep')} onClick={() => setScanMode('deep')}>Deep</button>
-                    <button type="button" style={modeBtn('pen_test')} onClick={() => setScanMode('pen_test')}>Pen Test</button>
+                    <button type="button" style={modeBtn('deep')} onClick={async () => {
+                      if (hasConsent) { setScanMode('deep'); return }
+                      const { data: { session } } = await getSupabase().auth.getSession()
+                      if (session && await checkConsent(session.access_token)) {
+                        setHasConsent(true); setScanMode('deep')
+                      } else {
+                        setPendingScanMode('deep'); setShowConsentModal(true)
+                      }
+                    }}>
+                      Deep {hasConsent === false && <span style={{ fontSize: '8px', opacity: 0.5 }}>🔒</span>}
+                    </button>
+                    <button type="button" style={modeBtn('pen_test')} onClick={async () => {
+                      if (hasConsent) { setScanMode('pen_test'); return }
+                      const { data: { session } } = await getSupabase().auth.getSession()
+                      if (session && await checkConsent(session.access_token)) {
+                        setHasConsent(true); setScanMode('pen_test')
+                      } else {
+                        setPendingScanMode('pen_test'); setShowConsentModal(true)
+                      }
+                    }}>
+                      Pen Test {hasConsent === false && <span style={{ fontSize: '8px', opacity: 0.5 }}>🔒</span>}
+                    </button>
                   </div>
                 </div>
 
@@ -854,6 +908,82 @@ export default function ScanPage() {
           </div>
         )}
       </div>
+      {showConsentModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#0d0d12', border: '1px solid rgba(255,255,255,0.1)',
+            padding: '36px', maxWidth: '480px', width: '90%',
+          }}>
+            <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#ff4560', marginBottom: '16px' }}>
+              Elevated Privileges Required
+            </p>
+            <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: '22px', color: '#f0ede8', marginBottom: '16px' }}>
+              Advanced Scan Consent
+            </h2>
+            <p style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '13px', color: 'rgba(240,237,232,0.6)', lineHeight: 1.7, marginBottom: '20px' }}>
+              <strong style={{ color: '#f0ede8' }}>{pendingScanMode === 'pen_test' ? 'Pen Test' : 'Deep'} mode</strong> uses additional system-level tools:
+            </p>
+            <ul style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: 'rgba(240,237,232,0.5)', lineHeight: 2, marginBottom: '20px', listStyle: 'none', padding: 0 }}>
+              {pendingScanMode === 'deep' && <li>→ Scapy raw socket firewall probe</li>}
+              {pendingScanMode === 'pen_test' && <>
+                <li>→ Scapy raw socket firewall probe</li>
+                <li>→ TShark packet header capture (80 bytes only)</li>
+              </>}
+              <li style={{ color: '#00ff88' }}>→ No data leaves your machine</li>
+              <li style={{ color: '#00ff88' }}>→ Only protocol headers captured, never payloads</li>
+            </ul>
+            <p style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '12px', color: 'rgba(240,237,232,0.4)', marginBottom: '24px' }}>
+              This consent is recorded with a timestamp for your protection. You can revoke it anytime from Settings.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', marginBottom: '24px' }}>
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                style={{ marginTop: '2px', accentColor: '#00ff88' }}
+              />
+              <span style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '13px', color: 'rgba(240,237,232,0.7)' }}>
+                I understand that this scan mode requires elevated system access and I consent to its use on my own network.
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => { setShowConsentModal(false); setConsentChecked(false); setPendingScanMode(null) }}
+                style={{ flex: 1, fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(240,237,232,0.4)', cursor: 'pointer', letterSpacing: '0.1em' }}
+              >
+                Decline
+              </button>
+              <button
+                disabled={!consentChecked}
+                onClick={async () => {
+                  const { data: { session } } = await getSupabase().auth.getSession()
+                  if (!session) return
+                  const ok = await grantConsent(session.access_token)
+                  if (ok) {
+                    setHasConsent(true)
+                    setScanMode(pendingScanMode)
+                    setShowConsentModal(false)
+                    setConsentChecked(false)
+                    setPendingScanMode(null)
+                  }
+                }}
+                style={{
+                  flex: 1, fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', padding: '12px',
+                  background: consentChecked ? '#00ff88' : 'rgba(0,255,136,0.1)',
+                  border: '1px solid #00ff88', color: consentChecked ? '#060608' : 'rgba(0,255,136,0.3)',
+                  cursor: consentChecked ? 'pointer' : 'not-allowed', letterSpacing: '0.1em',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Accept & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

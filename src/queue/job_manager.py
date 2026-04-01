@@ -20,22 +20,40 @@ def _get_conn() -> sqlite3.Connection:
         "job_id TEXT PRIMARY KEY,"
         "user_id TEXT,"
         "target TEXT,"
+        "scan_mode TEXT DEFAULT 'fast',"
         "status TEXT,"
         "created_at TEXT,"
         "result_json TEXT,"
         "error_message TEXT"
         ")"
     )
+
+    # Backward-compatible schema migration for existing databases.
+    try:
+        columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(scan_jobs)").fetchall()
+        }
+        if "scan_mode" not in columns:
+            conn.execute(
+                "ALTER TABLE scan_jobs ADD COLUMN scan_mode TEXT DEFAULT 'fast'"
+            )
+            conn.commit()
+    except Exception as e:
+        logging.error(f"Failed ensuring scan_mode column exists: {e}")
+        raise
+
     return conn
 
 
-def create_job(user_id: str, target: str) -> str:
+def create_job(user_id: str, target: str, scan_mode: str = "fast") -> str:
     """
     Insert a new scan job with status "queued".
 
     Args:
         user_id: Identifier for the requesting user.
         target: IP address or hostname to scan.
+        scan_mode: Requested scan profile (fast, deep, pen_test).
 
     Returns:
         The generated job_id (UUID string).
@@ -44,13 +62,22 @@ def create_job(user_id: str, target: str) -> str:
     try:
         conn = _get_conn()
         conn.execute(
-            "INSERT INTO scan_jobs (job_id, user_id, target, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (job_id, user_id, target, "queued", datetime.now(timezone.utc).isoformat()),
+            "INSERT INTO scan_jobs (job_id, user_id, target, scan_mode, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                job_id,
+                user_id,
+                target,
+                scan_mode,
+                "queued",
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         conn.commit()
         conn.close()
-        logging.info(f"Created job {job_id} for user {user_id}, target {target}")
+        logging.info(
+            f"Created job {job_id} for user {user_id}, target {target}, mode {scan_mode}"
+        )
     except Exception as e:
         logging.error(f"Failed to create job: {e}")
         raise
@@ -67,7 +94,7 @@ def get_next_job() -> dict | None:
     try:
         conn = _get_conn()
         cursor = conn.execute(
-            "SELECT job_id, user_id, target, status, created_at "
+            "SELECT job_id, user_id, target, scan_mode, status, created_at "
             "FROM scan_jobs WHERE status = ? ORDER BY created_at ASC LIMIT 1",
             ("queued",),
         )
@@ -79,8 +106,9 @@ def get_next_job() -> dict | None:
             "job_id": row[0],
             "user_id": row[1],
             "target": row[2],
-            "status": row[3],
-            "created_at": row[4],
+            "scan_mode": row[3] or "fast",
+            "status": row[4],
+            "created_at": row[5],
         }
     except Exception as e:
         logging.error(f"Failed to get next job: {e}")
@@ -161,7 +189,7 @@ def get_job_status(job_id: str) -> dict:
     try:
         conn = _get_conn()
         cursor = conn.execute(
-            "SELECT job_id, user_id, status, result_json, error_message "
+            "SELECT job_id, user_id, scan_mode, status, result_json, error_message "
             "FROM scan_jobs WHERE job_id = ?",
             (job_id,),
         )
@@ -170,18 +198,36 @@ def get_job_status(job_id: str) -> dict:
         if row is None:
             return {}
         result_json = None
-        if row[3]:
+        if row[4]:
             try:
-                result_json = json.loads(row[3])
+                result_json = json.loads(row[4])
             except Exception:
-                result_json = row[3]
+                result_json = row[4]
         return {
             "job_id": row[0],
             "user_id": row[1],
-            "status": row[2],
+            "scan_mode": row[2] or "fast",
+            "status": row[3],
             "result_json": result_json,
-            "error_message": row[4],
+            "error_message": row[5],
         }
     except Exception as e:
         logging.error(f"Failed to get job status for {job_id}: {e}")
         return {}
+
+def clear_user_jobs(user_id: str) -> None:
+    """
+    Deletes all scan jobs for a specific user from the local SQLite database.
+    """
+    try:
+        conn = _get_conn()
+        conn.execute(
+            "DELETE FROM scan_jobs WHERE user_id = ?",
+            (user_id,)
+        )
+        conn.commit()
+        conn.close()
+        logging.info(f"Cleared local job history for user {user_id}")
+    except Exception as e:
+        logging.error(f"Failed to clear local jobs for user {user_id}: {e}")
+        raise

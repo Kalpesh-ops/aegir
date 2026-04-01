@@ -7,25 +7,21 @@ from supabase.lib.client_options import SyncClientOptions
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    raise ValueError(
-        "SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables"
-    )
-
-
 def _get_client() -> Client:
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    # Use Service Role Key for backend workers to bypass RLS
+    SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise ValueError(
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables"
+        )
+
     return create_client(
         SUPABASE_URL,
-        SUPABASE_ANON_KEY,
+        SUPABASE_KEY,
         options=SyncClientOptions(postgrest_client_timeout=30),
     )
-
-
-supabase: Client | None = None
-
 
 def store_scan_result(
     user_id: str,
@@ -35,11 +31,19 @@ def store_scan_result(
     ai_summary: str,
 ) -> dict:
     highest_cvss = 0.0
+    crit_count = high_count = med_count = low_count = 0
+
+    # Pre-calculate severity distribution for the ultra-fast frontend chart
     for cve in cve_findings:
         try:
             cvss = float(cve.get("cvss", 0))
             if cvss > highest_cvss:
                 highest_cvss = cvss
+            
+            if cvss >= 9.0: crit_count += 1
+            elif cvss >= 7.0: high_count += 1
+            elif cvss >= 4.0: med_count += 1
+            elif cvss > 0: low_count += 1
         except (ValueError, TypeError):
             pass
 
@@ -52,6 +56,10 @@ def store_scan_result(
         "ai_summary": ai_summary,
         "cve_count": len(cve_findings),
         "highest_cvss": highest_cvss,
+        "crit_count": crit_count,
+        "high_count": high_count,
+        "med_count": med_count,
+        "low_count": low_count,
     }
 
     return _get_client().table("scans").insert(row).execute().data[0]
