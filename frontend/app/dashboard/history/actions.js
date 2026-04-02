@@ -7,6 +7,9 @@ import { revalidatePath } from 'next/cache'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// All page sizes used by the app. Keep in sync with any fetchScans() callers.
+const CACHE_PAGE_SIZES = [10, 25, 50, 100]
+
 export async function clearUserHistoryAction() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -43,9 +46,8 @@ export async function clearUserHistoryAction() {
     throw new Error(deleteError.message)
   }
 
-  // 2. Clear the local Node.js memory cache for this user
-  scanCache.set(user.id, 50, [])
-  scanCache.set(user.id, 100, [])
+  // 2. Clear the local Node.js memory cache for this user across ALL page sizes
+  CACHE_PAGE_SIZES.forEach((size) => scanCache.set(user.id, size, []))
 
   // 3. Delete from the local Python SQLite Database via API
   try {

@@ -34,6 +34,17 @@ function getRiskBadge(cvss, size = 'sm') {
   return { label: 'Low', color: '#00ff88', bg: 'rgba(0,255,136,0.08)' }
 }
 
+// Maps scan_mode values to display labels and accent colors
+const SCAN_MODE_META = {
+  fast:     { label: 'Fast Scan',     color: '#00ff88', bg: 'rgba(0,255,136,0.08)' },
+  deep:     { label: 'Deep Scan',     color: '#4af4ff', bg: 'rgba(74,244,255,0.08)' },
+  pen_test: { label: 'Pen Test',      color: '#ffb340', bg: 'rgba(255,179,64,0.08)' },
+}
+
+function getScanModeBadge(mode) {
+  return SCAN_MODE_META[mode] || { label: 'Fast Scan', color: '#00ff88', bg: 'rgba(0,255,136,0.08)' }
+}
+
 const sevColors = ['#ff4560', '#ffb340', '#4af4ff', 'rgba(240,237,232,0.35)']
 const sevLabels = ['Critical', 'High', 'Medium', 'Low']
 
@@ -78,12 +89,13 @@ const markdownComponents = {
 }
 
 export default function ScanResultClient({
-  id, target_redacted, scan_timestamp, ports, cve_findings, ai_summary, cve_count, highest_cvss
+  id, target_redacted, scan_timestamp, ports, cve_findings, ai_summary, cve_count, highest_cvss, scan_mode
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('report')
   const scanIdShort = id.substring(0, 8)
   const risk = getRiskBadge(highest_cvss)
+  const modeMeta = getScanModeBadge(scan_mode)
 
   const sevData = (() => {
     const buckets = { Critical: 0, High: 0, Medium: 0, Low: 0 }
@@ -196,20 +208,34 @@ export default function ScanResultClient({
             </h1>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <span style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              color: risk.color,
-              background: risk.bg,
-              border: `1px solid ${risk.color}`,
-              padding: '8px 20px',
-              display: 'inline-block',
-              marginBottom: '8px',
-            }}>
-              {risk.label} Risk
-            </span>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <span style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: modeMeta.color,
+                background: modeMeta.bg,
+                border: `1px solid ${modeMeta.color}`,
+                padding: '8px 16px',
+                display: 'inline-block',
+              }}>
+                {modeMeta.label}
+              </span>
+              <span style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: risk.color,
+                background: risk.bg,
+                border: `1px solid ${risk.color}`,
+                padding: '8px 20px',
+                display: 'inline-block',
+              }}>
+                {risk.label} Risk
+              </span>
+            </div>
             <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: 'rgba(240,237,232,0.4)', letterSpacing: '0.05em' }}>
               {formatDate(scan_timestamp)}
             </p>

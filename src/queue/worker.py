@@ -226,6 +226,7 @@ def run_worker() -> None:
                         ports=redacted["ports"],
                         cve_findings=redacted["cve_findings"],
                         ai_summary=ai_summary,
+                        scan_mode=scan_mode,  # ← now persisted to Supabase
                     )
                 except Exception as sb_err:
                     logging.error(f"[Worker] Supabase store failed (non-fatal): {sb_err}")

@@ -43,6 +43,17 @@ function parseCvss(cvss) {
   return parseFloat(cvss) || 0
 }
 
+// Maps scan_mode values to display labels and accent colors
+const SCAN_MODE_META = {
+  fast:     { label: 'Fast',     color: '#00ff88', bg: 'rgba(0,255,136,0.08)' },
+  deep:     { label: 'Deep',     color: '#4af4ff', bg: 'rgba(74,244,255,0.08)' },
+  pen_test: { label: 'Pen Test', color: '#ffb340', bg: 'rgba(255,179,64,0.08)' },
+}
+
+function getScanModeBadge(mode) {
+  return SCAN_MODE_META[mode] || { label: mode || 'Fast', color: '#00ff88', bg: 'rgba(0,255,136,0.08)' }
+}
+
 const cardStyle = (accent) => ({
   background: 'rgba(255,255,255,0.03)',
   border: '1px solid rgba(255,255,255,0.07)',
@@ -218,60 +229,26 @@ export default function DashboardClient({ scans }) {
       {scans.length === 0 ? (
         <div style={{
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '80px 40px',
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          height: '200px',
+          border: '1px solid rgba(255,255,255,0.05)',
           marginBottom: '32px',
         }}>
           <p style={{
-            fontFamily: "'Syne', sans-serif",
-            fontWeight: 800,
-            fontSize: '120px',
-            color: 'rgba(240,237,232,0.06)',
-            lineHeight: 1,
-            marginBottom: '24px',
-          }}>
-            0
-          </p>
-          <p style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '12px',
-            color: 'rgba(240,237,232,0.3)',
-            marginBottom: '32px',
-          }}>
-            No scans yet.
-          </p>
-          <Link href="/dashboard/scan" style={{
             fontFamily: "'JetBrains Mono', monospace",
             fontSize: '11px',
-            fontWeight: 500,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: '#060608',
-            background: '#00ff88',
-            border: 'none',
-            padding: '14px 36px',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            clipPath: 'polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%)',
+            color: 'rgba(240,237,232,0.2)',
+            letterSpacing: '0.1em',
           }}>
-            Start Scanning
-          </Link>
+            No scan data yet
+          </p>
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '2px',
-          marginBottom: '32px',
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', marginBottom: '32px' }}>
           {/* Severity Chart */}
           <div style={chartCardStyle}>
-            <p style={chartLabelStyle}>CVE Severity Distribution</p>
+            <p style={chartLabelStyle}>CVE Severity Breakdown</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={severityData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
@@ -375,7 +352,7 @@ export default function DashboardClient({ scans }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Target', 'Date', 'CVEs', 'Highest CVSS', 'Risk', 'Action'].map((h) => (
+              {['Target', 'Mode', 'Date', 'CVEs', 'Highest CVSS', 'Risk', 'Action'].map((h) => (
                 <th key={h} style={{
                   fontFamily: "'JetBrains Mono', monospace",
                   fontSize: '10px',
@@ -395,7 +372,7 @@ export default function DashboardClient({ scans }) {
           <tbody>
             {filteredScans.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{
+                <td colSpan={7} style={{
                   textAlign: 'center',
                   padding: '40px',
                   fontFamily: "'JetBrains Mono', monospace",
@@ -408,6 +385,7 @@ export default function DashboardClient({ scans }) {
             ) : (
               filteredScans.map((scan) => {
                 const risk = getRiskBadge(parseCvss(scan.highest_cvss))
+                const modeMeta = getScanModeBadge(scan.scan_mode)
                 return (
                   <tr key={scan.id} className="table-row" style={{
                     borderBottom: '1px solid rgba(255,255,255,0.04)',
@@ -420,6 +398,21 @@ export default function DashboardClient({ scans }) {
                         color: '#f0ede8',
                       }}>
                         {scan.target_redacted || '—'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '9px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        color: modeMeta.color,
+                        background: modeMeta.bg,
+                        border: `1px solid ${modeMeta.color}`,
+                        padding: '3px 8px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {modeMeta.label}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
