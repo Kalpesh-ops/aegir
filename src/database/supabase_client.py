@@ -23,6 +23,25 @@ def _get_client() -> Client:
         options=SyncClientOptions(postgrest_client_timeout=30),
     )
 
+
+def _insert_scan_row(client: Client, row: dict) -> dict:
+    try:
+        response = client.table("scans").insert(row).execute()
+        return response.data[0]
+    except Exception as first_error:
+        if "ports_count" not in row:
+            raise
+
+        error_message = str(first_error).lower()
+        if "ports_count" not in error_message and "column" not in error_message:
+            raise
+
+        fallback_row = dict(row)
+        fallback_row.pop("ports_count", None)
+        logger.warning(f"[Supabase] Retrying scan insert without ports_count: {first_error}")
+        response = client.table("scans").insert(fallback_row).execute()
+        return response.data[0]
+
 def store_scan_result(
     user_id: str,
     target_redacted: str,
@@ -31,6 +50,7 @@ def store_scan_result(
     ai_summary: str,
     scan_mode="fast"
 ) -> dict:
+    ports_count = len(ports or [])
     highest_cvss = 0.0
     crit_count = high_count = med_count = low_count = 0
 
@@ -52,6 +72,7 @@ def store_scan_result(
         "user_id": user_id,
         "target_redacted": target_redacted,
         "scan_timestamp": datetime.now(timezone.utc).isoformat(),
+        "ports_count": ports_count,
         "ports_json": json.dumps(ports),
         "cve_findings_json": json.dumps(cve_findings),
         "ai_summary": ai_summary,
@@ -64,7 +85,7 @@ def store_scan_result(
         "low_count": low_count,
     }
 
-    return _get_client().table("scans").insert(row).execute().data[0]
+    return _insert_scan_row(_get_client(), row)
 
 
 def get_user_scans(user_id: str) -> list[dict]:

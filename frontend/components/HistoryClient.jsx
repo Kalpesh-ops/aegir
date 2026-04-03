@@ -20,13 +20,39 @@ function parseCvss(cvss) {
   return parseFloat(cvss) || 0
 }
 
-function parsePorts(ports) {
-  if (!ports) return 0
-  if (typeof ports === 'string') {
-    try { return JSON.parse(ports).length } catch { return 0 }
+function getPortCount(scan) {
+  if (!scan) return null
+
+  if (scan.ports_count !== null && scan.ports_count !== undefined && scan.ports_count !== '') {
+    const explicitCount = Number(scan.ports_count)
+    if (Number.isFinite(explicitCount)) return explicitCount
   }
-  if (Array.isArray(ports)) return ports.length
-  return 0
+
+  const rawPorts = scan.ports_json ?? scan.ports
+  if (rawPorts === null || rawPorts === undefined) return null
+
+  if (typeof rawPorts === 'string') {
+    try {
+      const parsed = JSON.parse(rawPorts)
+      if (Array.isArray(parsed)) return parsed.length
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.open_ports)) return parsed.open_ports.length
+        if (Array.isArray(parsed.ports)) return parsed.ports.length
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
+
+  if (Array.isArray(rawPorts)) return rawPorts.length
+
+  if (rawPorts && typeof rawPorts === 'object') {
+    if (Array.isArray(rawPorts.open_ports)) return rawPorts.open_ports.length
+    if (Array.isArray(rawPorts.ports)) return rawPorts.ports.length
+  }
+
+  return null
 }
 
 function getRisk(cvss, cveCount) {
@@ -68,7 +94,7 @@ function ScanCard({ scan, index }) {
   const risk = getRisk(scan.highest_cvss, scan.cve_count)
   const cfg = riskConfig[risk]
   const accentColor = accentColors[risk]
-  const portCount = parsePorts(scan.ports)
+  const portCount = getPortCount(scan)
   const animDelay = Math.min(index * 40, 400)
 
   return (
@@ -130,7 +156,7 @@ function ScanCard({ scan, index }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(240,237,232,0.3)' }}>Ports</span>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', fontWeight: 500, color: 'rgba(240,237,232,0.6)' }}>{portCount || '—'}</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', fontWeight: 500, color: 'rgba(240,237,232,0.6)' }}>{portCount === null ? 'N/A' : portCount}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(240,237,232,0.3)' }}>Status</span>
@@ -270,6 +296,13 @@ export default function HistoryClient({ scans }) {
         {['All', 'Fast', 'Deep', 'Pen Test'].map((m) => {
           const isActive = modeFilter === m
           const color = m === 'Fast' ? '#00ff88' : m === 'Deep' ? '#4af4ff' : m === 'Pen Test' ? '#ffb340' : 'rgba(240,237,232,0.5)'
+          const activeBackground = m === 'Fast'
+            ? 'rgba(0,255,136,0.12)'
+            : m === 'Deep'
+              ? 'rgba(74,244,255,0.12)'
+              : m === 'Pen Test'
+                ? 'rgba(255,179,64,0.12)'
+                : 'rgba(240,237,232,0.12)'
           return (
             <button
               key={m}
@@ -278,7 +311,7 @@ export default function HistoryClient({ scans }) {
                 fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', textTransform: 'uppercase',
                 letterSpacing: '0.1em', padding: '5px 14px',
                 border: isActive ? `1px solid ${color}` : '1px solid rgba(255,255,255,0.06)',
-                background: isActive ? `${color}12` : 'transparent',
+                background: isActive ? activeBackground : 'transparent',
                 color: isActive ? color : 'rgba(240,237,232,0.3)',
                 cursor: 'pointer', transition: 'all 0.2s',
               }}
