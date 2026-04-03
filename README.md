@@ -1,387 +1,558 @@
 # 🛡️ NetSec AI Scanner
-> *Automated Network Vulnerability Scanning & AI-Powered Intelligence Analysis*
+
+> *Automated Network Vulnerability Scanning & AI-Powered Threat Intelligence*
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)
 ![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js)
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue?style=for-the-badge&logo=python)
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi)
-![React](https://img.shields.io/badge/React-19.2.4-61dafb?style=for-the-badge&logo=react)
-![Gemini](https://img.shields.io/badge/Google%20Gemini%202.5-8E75B2?style=for-the-badge&logo=google)
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=for-the-badge&logo=next.js)
+![Supabase](https://img.shields.io/badge/Supabase-3fcf8e?style=for-the-badge&logo=supabase)
+![Gemini](https://img.shields.io/badge/Gemini%202.5%20Flash-8E75B2?style=for-the-badge&logo=google)
 
 ---
 
 ## 🚩 Problem Statement
+
 Network security tools generate high-fidelity data, but the output is often too cryptic for non-experts to act on quickly. Critical services remain exposed because remediation guidance is unclear or buried in raw logs.
 
 ---
 
 ## 💡 The Solution
+
 **NetSec AI** turns raw network telemetry into clear, actionable security guidance:
-1.  **Scans** the network using industry-standard engines (Nmap & Scapy).
-2.  **Analyzes** the raw logs using **Google Gemini 2.5 Flash**.
-3.  **Translates** technical jargon into a concise remediation report.
+
+1.  **Scans** the network using industry-standard engines (Nmap, Scapy & TShark).
+2.  **Correlates** discovered services against **247K+ real CVEs** from the CIRCL vulnerability database — pure determinism, no AI at this stage.
+3.  **Analyzes** findings using **Google Gemini 2.5 Flash** to produce plain-English remediation reports.
+4.  **Protects** user privacy at every stage — PII is stripped before any data leaves the server.
 
 It turns *"Port 445 Open (Microsoft-DS)"* into *"High Risk: Your file sharing service is exposed. Block it using this firewall command..."*
 
 ---
 
-## ✅ Why NetSec AI Scanner?
-- **Signal over noise**: Nmap provides high-quality data; Gemini turns it into prioritized, plain-language remediation steps.
-- **Actionable by design**: Findings are formatted for quick fixes, not just diagnostics.
-- **Security-grade workflow**: Sanitization, token optimization, and strict input validation are built in.
-- **Modern UX**: Real-time progress and reports through a React interface.
+## ⚙️ System Architecture
+
+The application is built on a **decoupled full-stack architecture** with an async job queue, Supabase authentication, and a 3-tier AI caching layer.
+
+```mermaid
+graph TB
+    subgraph "Frontend — Next.js 16 (Vercel)"
+        A["Landing Page"] --> B["Supabase Auth (Login)"]
+        B --> C["Dashboard SPA"]
+        C --> C1["Scanner"]
+        C --> C2["Scan History"]
+        C --> C3["Settings"]
+    end
+
+    subgraph "Backend — FastAPI (GCP VM)"
+        D["API Gateway<br/>Rate Limiting + JWT Auth"]
+        D --> E["Job Queue<br/>(SQLite)"]
+        E --> F["Background Worker"]
+
+        subgraph "Scan Pipeline"
+            F --> G["Nmap Engine"]
+            F --> H["Scapy Engine"]
+            F --> I["TShark Engine"]
+        end
+
+        subgraph "CVE Intelligence"
+            F --> J["CIRCL Client<br/>(247K+ CVEs)"]
+            J --> K["VulnChecker<br/>(Script + API CVEs)"]
+        end
+
+        subgraph "Privacy Layer"
+            F --> L["Data Sanitizer<br/>(PII Redaction)"]
+        end
+
+        subgraph "AI Analysis"
+            L --> M["Gemini Client<br/>(3-Tier Cache)"]
+        end
+    end
+
+    subgraph "Data Layer"
+        N["Supabase (PostgreSQL)<br/>Scan History + Consent + Global AI Cache"]
+        O["SQLite (Local)<br/>Job Queue + CVE Cache + Local AI Cache"]
+    end
+
+    C1 -- "POST /api/scan<br/>(JWT)" --> D
+    C2 -- "GET /api/scans<br/>(JWT)" --> D
+    M --> N
+    F --> N
+    E --> O
+    J --> O
+    M --> O
+```
+
+### Backend Stack (FastAPI + Uvicorn)
+
+| Component | Technology | Purpose |
+|---|---|---|
+| **Server** | FastAPI + Uvicorn ASGI | Async REST API with automatic OpenAPI docs |
+| **Auth** | Supabase JWT (ES256) | Stateless token verification via JWKS endpoint |
+| **Job Queue** | SQLite-backed FIFO | Async scan queuing with background worker thread |
+| **Scanning** | Nmap, Scapy, TShark | Port scanning, firewall detection, packet capture |
+| **CVE Database** | CIRCL API + SQLite cache | Deterministic vulnerability correlation (7-day TTL) |
+| **AI Engine** | Google Gemini 2.5 Flash | Threat analysis with 3-tier caching (Local → Global → API) |
+| **Privacy** | Custom PII Sanitizer | Regex-based redaction of MACs, IPs, emails, credentials |
+
+### Frontend Stack (Next.js 16 + React 19)
+
+| Component | Technology | Purpose |
+|---|---|---|
+| **Framework** | Next.js 16 (Turbopack) | Server components, middleware auth, API rewrites |
+| **UI Library** | React 19.2 | Modern hooks, client components |
+| **Auth** | Supabase SSR | Cookie-based session management with middleware guards |
+| **Visualization** | Recharts, React Three Fiber | Severity charts, 3D particle background |
+| **Styling** | Vanilla CSS | Custom cyberpunk design system (Syne + JetBrains Mono) |
+| **Animation** | Framer Motion | Page transitions, micro-interactions |
+| **Security** | DOMPurify | XSS sanitization for AI-generated markdown |
 
 ---
 
-## ⚙️ Architecture & How It Works
+## 🔄 Process Flow — Scan Pipeline
 
-The application is built on a modern **Full-Stack Architecture**:
+The following flowchart details what happens from the moment a user clicks "Scan" to receiving their threat report.
+
+```mermaid
+flowchart TD
+    A["👤 User submits target IP"] --> B{"Input Validation<br/>(Private IP only)"}
+    B -- Invalid --> B1["❌ 400 Rejection"]
+    B -- Valid --> C["Rate Limit Check<br/>(5 scans/hour/IP)"]
+    C -- Exceeded --> C1["❌ 429 Too Many Requests"]
+    C -- OK --> D["Create Job<br/>(SQLite queue, status: queued)"]
+    D --> E["Return job_id to client"]
+    E --> F["Frontend polls<br/>GET /api/scan/:id"]
+
+    D --> G["🔄 Background Worker<br/>picks up job"]
+    G --> H{"Scan Mode?"}
+
+    H -- fast --> I["Nmap<br/>-sT -F -sV"]
+    H -- deep --> J["Nmap<br/>-sT -sV --script=default"]
+    H -- pen_test --> K["Nmap<br/>-sT -sV -p- (all ports)"]
+
+    I --> L["Parse XML → Port List"]
+    J --> L
+    K --> L
+
+    J --> M["Scapy ACK Probe<br/>(Firewall Detection)"]
+    K --> M
+    K --> N["TShark Capture<br/>(30s, headers-only)"]
+
+    L --> O["CIRCL CVE Lookup<br/>(per service/product)"]
+    O --> P["VulnChecker<br/>(Nmap scripts + CIRCL merge)"]
+
+    P --> Q["🔒 PII Redaction<br/>(data_sanitizer.py)"]
+    Q --> R{"AI Cache Check"}
+    R -- "1. Local SQLite" --> S["✅ Return cached report"]
+    R -- "2. Global Supabase" --> S
+    R -- "3. Cache miss" --> T["🤖 Gemini 2.5 Flash<br/>Analysis"]
+    T --> U["Cache to Local + Global"]
+    U --> S
+
+    S --> V["Store to Supabase<br/>(scans table)"]
+    V --> W["Mark job complete"]
+    W --> F
+    F --> X["📊 Dashboard renders<br/>ports, CVEs, AI report"]
+
+    style Q fill:#1a3a1a,stroke:#00ff88,color:#00ff88
+    style T fill:#2a1a3a,stroke:#8E75B2,color:#fff
+```
+
+### Scan Modes
+
+| Mode | Nmap Flags | Scapy | TShark | CVE Source | Est. Time |
+|---|---|---|---|---|---|
+| **Fast** | `-Pn -sT -F -sV` | ❌ | ❌ | CIRCL API | ~38s |
+| **Deep** | `-Pn -sT -sV --script=default` | ✅ Port 80 | ❌ | VulnChecker + CIRCL | ~105s |
+| **Pen Test** | `-Pn -sT -sV -p-` (all ports) | ✅ Port 445 | ✅ 30s capture | VulnChecker + CIRCL | ~225s |
+
+---
+
+## 🔒 Privacy Architecture
+
+Privacy is not a feature — it is embedded into the system architecture. Data is sanitized at multiple layers before it ever reaches an external service.
 
 ```mermaid
 flowchart LR
-  A["Frontend (Vercel)"] --> B["Backend (GCP VM)"]
-  B --> C[Nmap Engine]
-  C --> D[Gemini API]
-  D --> E[Result / Report]
-  E --> A
+    subgraph "Your Network"
+        A["Raw Scan Data<br/>IPs, MACs, Hostnames"]
+    end
+
+    subgraph "Privacy Firewall"
+        B["data_sanitizer.py"]
+        B1["Strip MAC addresses"]
+        B2["Mask private IPs → X.X.X.XXX"]
+        B3["Redact emails"]
+        B4["Remove credentials"]
+        B5["Redact hostnames"]
+        B --> B1 & B2 & B3 & B4 & B5
+    end
+
+    subgraph "External Services"
+        C["Google Gemini API<br/>(sees ONLY threat signatures)"]
+        D["Supabase DB<br/>(redacted target stored)"]
+    end
+
+    A --> B
+    B5 --> C
+    B5 --> D
+
+    style B fill:#1a3a1a,stroke:#00ff88,color:#00ff88
 ```
 
-### Backend Stack (FastAPI)
-- **Server**: FastAPI with Uvicorn ASGI server
-- **Scanning Engines**: Nmap, Scapy, TShark integration
-- **AI Analysis**: Google Gemini 2.5 Flash for intelligent threat assessment
-- **API**: RESTful endpoints for network scanning and threat analysis
+### Privacy Guarantees
 
-### Frontend Stack (React + Vite)
-- **Framework**: React 19.2.4 with modern hooks
-- **Build Tool**: Vite 7.3.1 for fast development
-- **Styling**: Tailwind CSS for responsive design
-- **Animations**: Framer Motion for interactive UI
-- **Visualization**: Particle network effects and threat dashboards
+| Layer | Protection | Implementation |
+|---|---|---|
+| **Input Validation** | Only private/loopback IPs accepted | `validators.py` rejects public IPs, validates CIDR ranges |
+| **PII Redaction** | MACs, IPs, emails, passwords stripped | `data_sanitizer.py` — recursive regex across all nested data |
+| **Token Optimization** | Only essential port/service data sent to AI | `token_optimizer.py` removes noise, keeps actionable fields |
+| **AI Context** | Gemini sees threat signatures, not topology | `redact_enriched_scan()` runs before any Gemini call |
+| **Consent Management** | GDPR-style explicit consent for advanced scans | `consent_manager.py` — versioned policy, revocable consent |
+| **TShark Privacy** | Only packet headers captured (80 bytes) | `-s 80` flag — payload data never captured |
+| **AI Cache Privacy** | Cache keys are SHA-256 hashes of vulnerability profiles | No IPs or user data in cache signatures |
 
-### 4-Stage Intelligence Pipeline
+### What The AI Sees vs. What It Doesn't
 
-#### 1. **Reconnaissance (Network Scanning)**
-- **Nmap Engine**: Performs comprehensive port scanning, service version detection, OS fingerprinting
-- **Scapy Engine**: Custom firewall detection using TCP ACK packet injection
-- **TShark Capture**: Optional packet-level analysis for advanced diagnostics
-- **Output**: Structured JSON with port states, services, and vulnerability metadata
-
-#### 2. **Firewall Intelligence (Dual-Engine Approach)**
-- **Primary**: Scapy-based ACK packet analysis to determine firewall state
-- **Fallback**: Intelligent Nmap output inference if Scapy fails (port state patterns, filtered port analysis)
-- **Confidence Scoring**: Risk assessment based on open, filtered, and closed port combinations
-- **Output**: Firewall detection results with confidence levels and port breakdowns
-
-#### 3. **AI Analysis (Threat Intelligence)**
-- **Model**: Google Gemini 2.5 Flash for contextual threat analysis
-- **Input**: Sanitized scan data (PII removed by data_sanitizer.py)
-- **Processing**: AI correlates open ports with known CVEs, exploitation risks, and business impact
-- **Output**: Executive-grade threat report with CVSS scores and remediation steps
-
-#### 4. **Presentation & Insights (React Dashboard)**
-- **Real-time Display**: Live scan progress with threat indicators
-- **Threat Metrics**: CVSS scoring, risk severity categorization
-- **Actionable Reports**: Clear remediation steps and firewall rules
+| ✅ AI Receives | ❌ AI Never Receives |
+|---|---|
+| Port numbers (22, 80, 443...) | IP addresses |
+| Service names (ssh, http...) | Hostnames |
+| Product/version (Apache 2.4.49) | MAC addresses |
+| CVE IDs + CVSS scores | Email addresses |
+| Threat severity classification | Passwords/credentials |
+| Protocol metadata | Network topology |
 
 ---
 
-## 🔧 Google Technologies Integrated
-
-### **Google Gemini 2.5 Flash** (Threat Intelligence Engine)
-| Component | Details |
-|-----------|---------|
-| **Purpose** | AI-powered threat analysis and vulnerability assessment |
-| **Capabilities** | Context-aware analysis of scan data, CVE correlation, remediation guidance |
-| **Implementation** | [src/ai_agent/gemini_client.py](src/ai_agent/gemini_client.py) |
-| **Prompting** | Specialized security analysis prompts in [src/ai_agent/prompts.py](src/ai_agent/prompts.py) |
-| **Integration** | Real-time API calls via `google-generativeai` SDK (v0.8.6+) |
-
-## 📂 Project Directory Structure
+## 📂 Directory Structure
 
 ```
-NetSec_AI_Scanner/
+netsec-ai-scanner/
 │
-├── 📄 server.py                    # FastAPI entry point (core backend)
-├── 📄 requirements.txt             # Python dependencies
-├── 📄 README.md                    # This file
-├── 📄 .env                         # Environment variables (API keys, credentials)
-├── 📄 .gitignore                   # Git ignore rules
+├── 📄 server.py                         # FastAPI entry (routes, middleware, worker bootstrap)
+├── 📄 requirements.txt                  # Python dependencies
+├── 📄 .env.example                      # Backend env template
 │
-├── 📁 config/                      # Configuration & Credentials
-│   ├── settings.py                 # Application configuration
-│   └── __init__.py
+├── 📁 config/                           # Configuration
+│   └── settings.py                      # Application constants
 │
-├── 📁 src/                         # Core Application Source Code
+├── 📁 src/                              # Core Backend Source
 │   │
-│   ├── ai_agent/                   # AI/Intelligence Module
-│   │   ├── gemini_client.py        # Google Gemini API integration
-│   │   ├── check_models.py         # Model availability checker
-│   │   ├── report_generator.py     # Threat report generation
-│   │   └── prompts.py              # AI system prompts & instructions
+│   ├── 📁 auth/                         # 🔐 Authentication
+│   │   └── middleware.py                # Supabase JWT verification (ES256 JWKS)
 │   │
-│   ├── scanner/                    # Security Scanning Module
-│   │   ├── nmap_engine.py          # Nmap port scanning orchestration
-│   │   ├── scapy_engine.py         # Firewall detection (ACK packets)
-│   │   ├── tshark_capture.py       # Packet capture analysis
-│   │   └── vuln_checker.py         # Vulnerability pattern extraction
+│   ├── 📁 database/                     # 💾 Data Persistence
+│   │   ├── supabase_client.py           # Supabase SDK: scan storage + global AI cache
+│   │   └── consent_manager.py           # GDPR-style consent: grant, check, revoke
 │   │
-│   └── utils/                      # Utility Functions
-│       ├── data_sanitizer.py       # PII redaction & data privacy
-│       ├── token_optimizer.py      # API token optimization
-│       ├── validators.py           # Input validation
-│       └── __init__.py
+│   ├── 📁 queue/                        # ⚡ Async Job Queue
+│   │   ├── job_manager.py               # SQLite FIFO: create, poll, complete, fail
+│   │   └── worker.py                    # Background thread: scan pipeline orchestrator
+│   │
+│   ├── 📁 scanner/                      # 🔍 Network Scanning Engines
+│   │   ├── nmap_engine.py               # Nmap: port scan, service detection, XML parsing
+│   │   ├── scapy_engine.py              # Scapy: ACK packet firewall detection
+│   │   ├── tshark_engine.py             # TShark: header-only packet capture + summary
+│   │   └── tshark_capture.py            # Legacy TShark module
+│   │
+│   ├── 📁 vuln_lookup/                  # 🛡️ CVE Intelligence
+│   │   ├── circl_client.py              # CIRCL API: CVE lookup, 7-day SQLite cache, DNS fallback
+│   │   └── vuln_checker.py              # Dual-phase CVE: Nmap scripts + CIRCL API
+│   │
+│   ├── 📁 ai_agent/                     # 🤖 AI Analysis Engine
+│   │   ├── gemini_client.py             # Gemini 2.5: 3-tier cache, model fallback chain
+│   │   ├── prompts.py                   # System prompt: structured output format
+│   │   └── report_generator.py          # Report assembly
+│   │
+│   └── 📁 utils/                        # 🔧 Utilities
+│       ├── data_sanitizer.py            # PII redaction: MACs, IPs, emails, credentials
+│       ├── token_optimizer.py           # AI token pruning: strip noise, keep signal
+│       └── validators.py               # IP/CIDR validation: private-only enforcement
 │
-└── 📁 frontend/                    # React Frontend Application
-    ├── index.html                  # HTML entry point
-    ├── package.json                # npm dependencies (React 19.2.4, Vite 7.3.1)
-    ├── package-lock.json           # Lock file for reproducible builds
-    ├── vite.config.js              # Vite build configuration
-    ├── tailwind.config.js          # Tailwind CSS configuration
-    ├── postcss.config.js           # PostCSS configuration
-    ├── eslint.config.js            # Code quality configuration
+├── 📁 data/                             # Local databases (gitignored)
+│   ├── jobs.db                          # Job queue state
+│   ├── cve_cache.db                     # CIRCL CVE cache (7-day TTL)
+│   └── ai_cache.db                      # Local AI report cache
+│
+└── 📁 frontend/                         # Next.js 16 Frontend
+    ├── 📄 package.json                  # Dependencies (React 19, Next 16, Supabase SSR)
+    ├── 📄 next.config.js                # API rewrites, security headers
+    ├── 📄 middleware.js                 # Supabase session → route guards
+    ├── 📄 .env.example                  # Frontend env template
     │
-    ├── src/                        # React Source Code
-    │   ├── main.jsx                # React entry point
-    │   ├── App.jsx                 # Main application component
-    │   ├── App.css                 # Application styles
-    │   ├── index.css               # Global styles
+    ├── 📁 app/                          # Next.js App Router
+    │   ├── layout.jsx                   # Root layout (Syne + JetBrains Mono fonts)
+    │   ├── globals.css                  # Global styles + cyberpunk design system
+    │   ├── page.jsx                     # Landing page (hero, features, privacy, CTA)
     │   │
-    │   ├── components/             # React Components
-    │   │   └── ParticleNetwork.jsx # Interactive particle visualization
+    │   ├── 📁 login/                    # Auth
+    │   │   └── page.jsx                 # Supabase email/password + OAuth login
     │   │
-    │   └── assets/                 # Static assets
+    │   └── 📁 dashboard/                # Protected routes (auth-gated)
+    │       ├── layout.jsx               # Sidebar layout + server-side auth check
+    │       ├── page.jsx                 # Overview: recent scans, severity charts
+    │       │
+    │       ├── 📁 scan/                 # Scanner
+    │       │   ├── page.jsx             # Scan form + real-time result viewer
+    │       │   └── 📁 [id]/             # Dynamic scan result page
+    │       │
+    │       ├── 📁 history/              # Scan History
+    │       │   ├── page.jsx             # Past scans + Supabase actions
+    │       │   └── actions.js           # Server actions (delete history)
+    │       │
+    │       └── 📁 settings/             # User Settings
+    │           └── page.jsx             # Consent management, account
     │
-    └── public/                     # Static files served as-is
-
+    ├── 📁 components/                   # Shared Components
+    │   ├── DashboardClient.jsx          # Dashboard overview widget
+    │   ├── ScanResultClient.jsx         # Full scan result renderer (ports, CVEs, AI)
+    │   ├── HistoryClient.jsx            # Scan history table
+    │   ├── SidebarNav.jsx               # Dashboard sidebar navigation
+    │   ├── SidebarFooter.jsx            # Sidebar user info + logout
+    │   ├── Navbar.jsx                   # Landing page navbar
+    │   ├── Footer.jsx                   # Landing page footer
+    │   └── ParticleBackground.jsx       # Three.js 3D particle field
+    │
+    ├── 📁 hooks/                        # Custom React Hooks
+    │   └── useScrollAnimation.js        # Scroll-triggered reveal animations
+    │
+    └── 📁 lib/                          # Utilities
+        └── localCache.js               # In-memory scan cache (15s TTL)
 ```
 
-### **Notes on Directory Structure:**
-- ✅ **Committed to Git**: All source code, configuration templates, documentation
-- ❌ **Not Committed** (.gitignore): `node_modules/`, `__pycache__/`, `.venv/`, `logs/`, `.env` (use template)
-- 🔐 **Security**: API keys and backend URLs are never committed to the repository
-- 🚀 **Production Ready**: Modular architecture, separated frontend/backend, clear concerns
+### Notes on Directory Structure
+
+- ✅ **Committed**: All source code, config templates (`.env.example`), documentation
+- ❌ **Gitignored**: `node_modules/`, `__pycache__/`, `.venv/`, `data/`, `logs/`, `.env`, `.next/`
+- 🔐 **Secrets**: API keys, Supabase credentials, and backend URLs are never committed
+- 🗄️ **Local DBs**: `data/*.db` files are auto-created at runtime, never committed
 
 ---
 
 ## 💻 Local Development Setup
 
-Follow these steps to get the NetSec AI Scanner running on your local machine for development and testing.
-
 ### Prerequisites
 
-- **Python 3.12+** (Tested with Python 3.12.6)
-- **Nmap** - Network scanning engine
-  - **Windows**: Download from [nmap.org](https://nmap.org/download.html) and ensure **Npcap** is installed during setup
-  - **Linux**: `sudo apt install nmap` (Debian/Ubuntu) or `sudo yum install nmap` (RHEL/CentOS)
-  - **macOS**: `brew install nmap`
-- **Npcap/libpcap** - Required for Scapy packet injection
-  - **Windows**: Installed with Nmap (check the Npcap option)
-  - **Linux/macOS**: Usually pre-installed with Nmap
-- **Node.js 18+** and **npm** - For frontend development
+| Dependency | Version | Notes |
+|---|---|---|
+| **Python** | 3.12+ | Tested with 3.12.6 |
+| **Node.js** | 20+ | Required for Next.js 16 |
+| **Nmap** | Latest | Must be on PATH. [Download](https://nmap.org/download.html) |
+| **Npcap** (Windows) | Latest | Required for Scapy. Bundled with Nmap installer |
+| **Google API Key** | — | [Get one from AI Studio](https://aistudio.google.com/app/apikey) |
+| **Supabase Project** | — | [Create at supabase.com](https://supabase.com) |
+
+> **Optional**: Scapy (firewall detection) and TShark (packet capture) require elevated privileges. The system gracefully degrades if they are unavailable.
 
 ### Installation
 
 #### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/NetSec_AI_Scanner.git
-cd NetSec_AI_Scanner
+git clone https://github.com/Kalpesh-ops/netsec-ai-scanner.git
+cd netsec-ai-scanner
 ```
 
-#### 2. Backend Setup (Python)
-
-Create a Python virtual environment:
+#### 2. Backend Setup
 ```bash
+# Create virtual environment
 python -m venv .venv
 
-# Windows
+# Activate (Windows)
 .\.venv\Scripts\Activate.ps1
 
-# macOS/Linux
+# Activate (macOS/Linux)
 source .venv/bin/activate
-```
 
-Install Python dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-#### 3. Environment Configuration
+#### 3. Configure Environment Variables
 
-You need to configure environment variables for both backend and frontend.
+**Backend** — copy `.env.example` → `.env` (project root):
+```env
+GOOGLE_API_KEY=your_gemini_api_key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+ALLOWED_HOSTS=localhost,127.0.0.1
+```
 
-Use the provided templates:
-- Backend: `backend/.env.example`
-- Frontend: `frontend/.env.example`
+**Frontend** — copy `frontend/.env.example` → `frontend/.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
-Create your local `.env` files by copying the examples and filling in values.
-
-> **Note:** For production deployment, `VITE_API_URL` should point to your production backend URL.
-
-#### 4. Frontend Setup (React) - Optional
-
-If developing the frontend:
+#### 4. Frontend Setup
 ```bash
 cd frontend
 npm install
-npm run dev
 ```
-
-The frontend will be served at `http://localhost:5173`
 
 ### Running the Application
 
-#### Start the Backend Server
+#### Start Backend (API + Worker)
 ```bash
 python server.py
 ```
+This starts:
+- **FastAPI server** on `http://127.0.0.1:8000`
+- **Background worker thread** that processes queued scan jobs
 
-The API will be available at `http://localhost:8000`
-
-**Available Endpoints:**
-- `POST /api/scan` - Start a new network scan
-- `GET /api/health` - Health check endpoint
-- View full API docs at `http://localhost:8000/docs` (Swagger UI)
-
-#### Start the Frontend (Development)
+#### Start Frontend
 ```bash
 cd frontend
 npm run dev
 ```
+Frontend available at `http://localhost:3000`
 
-Open `http://localhost:5173` in your browser.
+### API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/scan` | JWT | Queue a new scan job |
+| `GET` | `/api/scan/:id` | JWT | Poll scan job status/result |
+| `GET` | `/api/scans` | JWT | List user's last 10 scans |
+| `DELETE` | `/api/scans` | JWT | Clear user's local scan history |
+| `GET` | `/api/consent` | JWT | Check user consent status |
+| `POST` | `/api/consent` | JWT | Grant consent for advanced scans |
+| `DELETE` | `/api/consent` | JWT | Revoke consent |
+| `POST` | `/api/analyze` | — | Direct AI analysis (rate-limited) |
+| `GET` | `/health` | — | Health check |
+
+> Interactive API docs available at `http://localhost:8000/docs` (Swagger UI)
 
 ---
+
 ## ✨ Key Features
 
-- **🎯 Intelligent Scanning**: Combines Nmap, Scapy, and TShark for comprehensive network analysis
-- **🤖 AI-Powered Analysis**: Google Gemini 2.5 Flash correlates vulnerabilities with real-world exploits
-- **🔐 Firewall Detection**: Dual-engine approach with fallback inference for robust firewall identification
-- **📊 Executive Reports**: Clear, actionable threat reports with remediation guidance
-- **🎨 Modern UI**: React-based dashboard with real-time visualization
-- **📈 Threat Scoring**: CVSS-based severity assessment for all discovered vulnerabilities
-- **🔒 Privacy-First**: PII redaction in all scanned data before AI analysis
+- **🔍 Multi-Engine Scanning**: Nmap (port/service), Scapy (firewall), TShark (traffic capture)
+- **🛡️ Deterministic CVE Correlation**: CIRCL database with 247K+ real CVEs — zero AI hallucination at this stage
+- **🤖 AI-Powered Reports**: Gemini 2.5 Flash translates findings into executive-grade remediation playbooks
+- **🔒 Privacy by Architecture**: PII stripped before any external API call. Network topology never leaves unredacted.
+- **⚡ 3-Tier AI Caching**: Local SQLite → Global Supabase → Gemini API. Identical scans hit cache instantly.
+- **🔐 Supabase Auth**: Email/password + OAuth login with JWT-protected API routes
+- **📊 Real-Time Dashboard**: Scan progress, severity charts (Recharts), scan history with Supabase persistence
+- **🎮 Cyberpunk UI**: Custom design system — Syne typography, 3D particle backgrounds, terminal-style animations
+- **🛡️ Consent Management**: GDPR-style explicit consent with versioned policies, grant/revoke API
+- **⏱️ Async Job Queue**: Non-blocking scan execution via SQLite-backed FIFO queue with background worker
 
 ---
 
 ## 🔌 API Usage Examples
 
-### Start a Network Scan
+### Queue a Network Scan
 ```bash
 curl -X POST "http://localhost:8000/api/scan" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_SUPABASE_JWT" \
   -d '{
-    "target": "192.168.1.0/24",
-    "scan_type": "comprehensive",
-    "enable_firewall_detection": true
+    "target": "192.168.1.1",
+    "scan_mode": "fast"
   }'
 ```
 
 ### Response
 ```json
 {
-  "scan_id": "scan_abc123",
-  "status": "running",
-  "target": "192.168.1.0/24",
-  "scan_type": "comprehensive",
-  "started_at": "2026-01-31T03:18:34.065Z"
+  "scan_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "queued",
+  "message": "Scan queued successfully"
 }
 ```
 
-### Check Server Health
+### Poll Scan Status
 ```bash
-curl "http://localhost:8000/api/health"
+curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+  -H "Authorization: Bearer YOUR_SUPABASE_JWT"
 ```
 
-### View API Documentation
-Visit `http://localhost:8000/docs` for interactive Swagger UI documentation of all endpoints.
-
 ---
+
 ## 🧰 Technology Stack
 
 ### Backend
-- **Framework**: FastAPI 0.128.0 (Async web framework)
-- **Server**: Uvicorn 0.40.0 (ASGI server)
-- **Scanning Tools**: 
-  - `python-nmap` - Network reconnaissance
-  - `scapy` 2.7.0 - Packet crafting & firewall testing
-  - TShark - Packet capture analysis
-- **AI Integration**: `google-generativeai` 0.8.6 (Gemini 2.5 Flash)
-- **Data Processing**: requests
-- **Environment**: `python-dotenv` for configuration
+| Package | Version | Purpose |
+|---|---|---|
+| `fastapi` | 0.128.0 | Async REST API framework |
+| `uvicorn` | 0.40.0 | ASGI server |
+| `google-generativeai` | 0.8.5 | Gemini 2.5 Flash SDK |
+| `supabase` | 2.28.2 | Supabase Python client (auth, DB) |
+| `scapy` | 2.7.0 | Packet crafting & firewall detection |
+| `python-jose` | 3.5.0 | JWT token verification |
+| `python-dotenv` | 1.0.0 | Environment variable management |
+| `requests` | 2.31.0 | HTTP client (CIRCL API) |
 
 ### Frontend
-- **Framework**: React 19.2.4
-- **Build Tool**: Vite 7.3.1
-- **Styling**: Tailwind CSS 3.4
-- **Animation**: Framer Motion
-- **Code Quality**: ESLint, PostCSS
-- **Package Manager**: npm
+| Package | Version | Purpose |
+|---|---|---|
+| `next` | 16.2.1 | React framework (App Router + Turbopack) |
+| `react` | 19.2.4 | UI library |
+| `@supabase/ssr` | 0.9.0 | Server-side Supabase auth |
+| `@supabase/supabase-js` | 2.99.3 | Supabase client SDK |
+| `recharts` | 3.8.0 | Severity distribution charts |
+| `framer-motion` | 12.29.2 | UI animations |
+| `@react-three/fiber` | 9.5.0 | 3D particle background |
+| `lucide-react` | 0.563.0 | Icon library |
+| `react-markdown` | 10.1.0 | AI report rendering |
+| `dompurify` | 3.3.3 | XSS sanitization |
 
-### Cloud Services (Google)
-- **Gemini 2.5 Flash** - Threat intelligence
+### Cloud & Infrastructure
+| Service | Purpose |
+|---|---|
+| **Google Gemini 2.5 Flash** | AI threat analysis engine |
+| **Supabase (PostgreSQL)** | Auth, scan history, global AI cache, consent |
+| **CIRCL CVE Database** | Public CVE lookup API (247K+ entries) |
+| **Vercel** | Frontend hosting (Edge CDN + SSR) |
+| **GCP Compute Engine** | Backend hosting (e2-micro, Always Free Tier) |
 
 ---
 
 ## 🌐 Production Deployment
 
 ### Live Application
-**Frontend:** [https://netsec-ai-scanner.vercel.app/](https://netsec-ai-scanner.vercel.app/)
+**Frontend:** [https://netsec-ai-scanner.vercel.app](https://netsec-ai-scanner.vercel.app)
 
-### Architecture Overview
-The **NetSec AI Scanner** is deployed using a secure, hybrid cloud architecture:
+### Deployment Architecture
 
-#### Frontend Deployment
-- **Platform:** [Vercel](https://vercel.com/)
-- **SSL/TLS:** Automatic HTTPS with Vercel's edge network
-- **Build:** Vite production build with optimized assets
-- **CDN:** Global content delivery for low-latency access
+| Layer | Platform | Details |
+|---|---|---|
+| **Frontend** | Vercel | Next.js SSR, Edge CDN, auto HTTPS |
+| **Backend** | GCP (e2-micro) | Ubuntu + Nginx reverse proxy, Let's Encrypt SSL |
+| **Database** | Supabase | Managed PostgreSQL with Row-Level Security |
+| **DNS** | `.nip.io` wildcard | SSL certificate validation for IP-based domains |
 
-#### Backend Deployment
-- **Platform:** Google Cloud Platform (GCP)
-- **Instance Type:** `e2-micro` (Always Free Tier)
-- **Region:** `us-central1-a` (Iowa, USA)
-- **Operating System:** Ubuntu Server with Nginx reverse proxy
-- **SSL/TLS:** Let's Encrypt certificates managed via Certbot
-- **Domain Strategy:** Using `.nip.io` wildcard DNS for SSL certificate validation
-- **Optimization:** Configured with 2GB swap file to handle network scanning on 1GB RAM
+### Security Hardening
+- **End-to-End Encryption**: All traffic over HTTPS (HSTS enabled)
+- **CORS Whitelist**: Only production frontend origin allowed
+- **Security Headers**: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, HSTS (via both Next.js and FastAPI middleware)
+- **Rate Limiting**: 5 scans/hour, 60 status polls/min, 10 analyses/min per IP
+- **Trusted Host Middleware**: Request validation against allowed hostnames
+- **Input Validation**: Strict regex for IPs, CIDR ranges, and scan parameters
+- **No Secrets in Code**: All credentials via environment variables, never committed
 
-#### Security Features
-- **End-to-End Encryption:** All communication encrypted via SSL/TLS (HTTPS)
-- **CORS Policy:** Backend API access restricted to authorized frontend origins
-- **Environment Isolation:** Production credentials managed via secure environment variables
-- **No Hardcoded Secrets:** Backend URL and API keys never committed to repository
-
-#### Infrastructure Highlights
-- **Zero-Cost Deployment:** Leveraging GCP Always Free Tier + Vercel free hosting
-- **24/7 Availability:** Both frontend and backend run continuously
-- **SSL Verification:** Green lock in browsers - no "Mixed Content" warnings
-- **API Documentation:** Interactive Swagger UI available at backend `/docs` endpoint
-
-### Backend Configuration
-The frontend communicates with the FastAPI backend via the `VITE_API_URL` environment variable.
-
-- **Production:** Backend URL is configured securely via environment variables (not exposed publicly)
-- **Local Development:** `http://localhost:8000`
-
-> **Security Note:** The production backend URL is intentionally not published in documentation to prevent unauthorized access and potential abuse of scanning capabilities.
+> **Security Note:** The production backend URL is intentionally not published in documentation to prevent unauthorized access and abuse of scanning capabilities.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a Pull Request.
 
 ---
 
 ## 📧 Contact
 
-For questions or support, please open an issue in the repository.
+For questions, security disclosures, or support — please open an issue or see [SECURITY.md](SECURITY.md).
