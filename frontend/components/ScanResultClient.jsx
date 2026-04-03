@@ -89,7 +89,8 @@ const markdownComponents = {
 }
 
 export default function ScanResultClient({
-  id, target_redacted, scan_timestamp, ports, cve_findings, ai_summary, cve_count, highest_cvss, scan_mode
+  id, target_redacted, scan_timestamp, ports, cve_findings, ai_summary, cve_count, highest_cvss, scan_mode,
+  firewall, traffic
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('report')
@@ -247,7 +248,7 @@ export default function ScanResultClient({
 
         {/* Tabs */}
         <div style={{ display: 'flex', marginBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          {[['report', 'AI Report'], ['cve', 'CVE Findings'], ['raw', 'Raw Data']].map(([tab, label]) => (
+          {[['report', 'AI Report'], ['cve', 'CVE Findings'], ['intel', 'Intelligence'], ['raw', 'Raw Data']].map(([tab, label]) => (
             <button key={tab} style={tabBtn(tab)} onClick={() => setActiveTab(tab)}>
               {label}
             </button>
@@ -514,6 +515,93 @@ export default function ScanResultClient({
                   {JSON.stringify(cve_findings, null, 2)}
                 </pre>
               </div>
+            </div>
+          )}
+          {/* Tab 4: Intelligence (Firewall + Traffic) */}
+          {activeTab === 'intel' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Firewall */}
+              {firewall ? (
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', padding: '24px' }}>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#00ff88', marginBottom: '16px' }}>
+                    Firewall Analysis
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', marginBottom: '16px' }}>
+                    {[
+                      ['Status', firewall.firewall_status || '—'],
+                      ['Method', firewall.inference_method === 'scapy_direct' ? 'Scapy Probe' : 'Nmap Inference'],
+                      ['Confidence', firewall.confidence || (firewall.inference_method === 'scapy_direct' ? 'high' : 'medium')],
+                    ].map(([k, v]) => (
+                      <div key={k} style={{ background: 'rgba(0,0,0,0.2)', padding: '16px' }}>
+                        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', color: 'rgba(240,237,232,0.3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>{k}</p>
+                        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: '#f0ede8' }}>{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {firewall.explanation && (
+                    <p style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '13px', color: 'rgba(240,237,232,0.55)', lineHeight: 1.7 }}>
+                      {firewall.explanation}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', padding: '24px' }}>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.18em', color: 'rgba(240,237,232,0.25)', marginBottom: '8px' }}>Firewall Analysis</p>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: 'rgba(240,237,232,0.25)' }}>
+                    {scan_mode === 'fast' ? 'Not available in Fast mode — use Deep or Pen Test.' : 'No firewall data captured.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Traffic */}
+              {traffic ? (
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', padding: '24px' }}>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.18em', color: '#00ff88', marginBottom: '16px' }}>
+                    Traffic Capture
+                  </p>
+                  {traffic.status === 'captured' ? (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', marginBottom: '16px' }}>
+                        {[
+                          ['Packets', traffic.protocol_summary?.total_packets ?? '—'],
+                          ['Duration', `${traffic.duration_seconds ?? 30}s`],
+                          ['Size', traffic.size_bytes ? `${(traffic.size_bytes / 1024).toFixed(1)} KB` : '—'],
+                        ].map(([k, v]) => (
+                          <div key={k} style={{ background: 'rgba(0,0,0,0.2)', padding: '16px' }}>
+                            <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', color: 'rgba(240,237,232,0.3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>{k}</p>
+                            <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: '#f0ede8' }}>{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {traffic.protocol_summary?.protocols_detected && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {Object.entries(traffic.protocol_summary.protocols_detected).map(([proto, count]) => (
+                            <span key={proto} style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: '#4af4ff', background: 'rgba(74,244,255,0.06)', border: '1px solid rgba(74,244,255,0.15)', padding: '4px 10px' }}>
+                              {proto} × {count}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', color: 'rgba(240,237,232,0.2)', marginTop: '12px' }}>
+                        {traffic.privacy_notes || 'Snapshot: 80 bytes (headers only, no payloads)'}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: 'rgba(240,237,232,0.25)' }}>
+                      {traffic.reason || 'Capture unavailable.'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', padding: '24px' }}>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.18em', color: 'rgba(240,237,232,0.25)', marginBottom: '8px' }}>Traffic Capture</p>
+                  <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: 'rgba(240,237,232,0.25)' }}>
+                    {scan_mode === 'pen_test' ? 'No capture data available.' : 'Only available in Pen Test mode.'}
+                  </p>
+                </div>
+              )}
+
             </div>
           )}
         </div>

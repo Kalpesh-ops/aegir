@@ -75,6 +75,9 @@ export default async function ScanResultPage({ params: paramsPromise }) {
       ports={ports}
       cve_findings={cveFindings}
       ai_summary={scan.ai_summary}
+      firewall={scan.firewall_json}
+      traffic={scan.traffic_json}
+      scan_mode={scan.scan_mode}  
       cve_count={scan.cve_count}
       highest_cvss={scan.highest_cvss}
     />

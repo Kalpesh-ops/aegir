@@ -48,7 +48,9 @@ def store_scan_result(
     ports: list,
     cve_findings: list,
     ai_summary: str,
-    scan_mode="fast"
+    scan_mode="fast",
+    firewall=None,
+    traffic=None
 ) -> dict:
     ports_count = len(ports or [])
     highest_cvss = 0.0
@@ -83,6 +85,8 @@ def store_scan_result(
         "high_count": high_count,
         "med_count": med_count,
         "low_count": low_count,
+        "firewall_json": firewall,
+        "traffic_json": traffic,
     }
 
     return _insert_scan_row(_get_client(), row)
