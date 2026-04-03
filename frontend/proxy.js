@@ -19,9 +19,9 @@ export async function middleware(req) {
       },
     }
   )
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuth = !!session
+  const isAuth = !!user
   const isDashboard = req.nextUrl.pathname.startsWith('/dashboard')
   const isLogin = req.nextUrl.pathname === '/login'
 
