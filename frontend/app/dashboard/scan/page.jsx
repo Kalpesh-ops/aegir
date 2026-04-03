@@ -265,7 +265,7 @@ export default function ScanPage() {
           if (count <= scanMessages.length) {
             addLog('info', 'SCAN', scanMessages[count - 1])
           }
-          const timeoutPolls = scanMode === 'pen_test' ? 240 : scanMode === 'deep' ? 100 : 40
+          const timeoutPolls = scanMode === 'pen_test' ? 240 : scanMode === 'deep' ? 100 : 60
           if (count >= timeoutPolls) {
             clearInterval(pollIntervalRef.current)
             setPhase('failed')

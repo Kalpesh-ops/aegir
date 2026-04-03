@@ -40,13 +40,13 @@ class NmapScanner:
         """Return Nmap arguments string for a given scan mode."""
         if mode == "fast":
             # FIX: Added -sV --version-intensity 5 so product/version are detected
-            return "-Pn -sT -F -sV --version-intensity 5"
+            return "-Pn -sT -F -sV --version-intensity 0"
         elif mode == "deep":
             return "-Pn -sT -sV --version-intensity 5 --script=default"
         elif mode == "pen_test":
             return "-Pn -sT -sV --version-intensity 9 -p-"
         else:
-            return "-Pn -sT -F -sV --version-intensity 5"
+            return "-Pn -sT -F -sV --version-intensity 0"
 
     def parse_ports_from_xml(self, xml_output: str) -> list:
         """
