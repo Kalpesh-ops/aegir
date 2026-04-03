@@ -2,14 +2,20 @@
 
 ## Supported Versions
 
-We support the latest version on the `main` branch.
+NetSec AI Scanner is a student-led project in active development.
+
+At this stage, security fixes are prioritized for:
+
+- The latest commit on `main`
+- The latest tagged release (if available)
+
+Older versions may not receive backported security patches.
 
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability, please report it privately and responsibly.
 
-- **Preferred**: GitHub Security Advisories
-  - https://github.com/<OWNER>/<REPO>/security/advisories
+- **Private contact email (preferred):** [INSERT_CONTACT_EMAIL]
 
 Please include:
 - A clear description of the issue

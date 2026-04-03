@@ -38,9 +38,11 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at:
 
-- GitHub Security Advisories: https://github.com/<OWNER>/<REPO>/security/advisories
+- Contact email: [INSERT_CONTACT_EMAIL]
 
 All complaints will be reviewed and investigated promptly and fairly.
+
+All community leaders are obligated to respect the privacy and security of the reporter.
 
 ## Enforcement Guidelines
 

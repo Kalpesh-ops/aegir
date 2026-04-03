@@ -1,47 +1,80 @@
-# Contributing
+# Contributing to NetSec AI Scanner
 
-Thank you for your interest in improving NetSec AI Scanner. This project is security-focused and welcomes high-quality contributions.
+Thank you for your interest in contributing.
 
-## Branching Strategy
+This is a student-led open-source project in active development, and contributions of all sizes are welcome, including bug reports, documentation improvements, testing feedback, and code changes.
 
-- `main` is always deployable.
-- Create feature branches from `main` using the pattern `feature/<short-name>`.
-- Use `fix/<short-name>` for bug fixes and `docs/<short-name>` for documentation updates.
-- Open a Pull Request (PR) targeting `main`.
-- Keep PRs focused; avoid mixing unrelated changes.
+## Ways to Contribute
 
-## How to Report Bugs
+- Report bugs
+- Suggest features or UX improvements
+- Improve documentation
+- Submit code fixes and enhancements
+- Share security and performance feedback
 
-Please open a bug report using the issue template.
+## Before You Start
 
-Include:
-- Clear reproduction steps
-- Expected vs. actual behavior
-- Logs or screenshots (redact sensitive data)
-- OS and environment details
+- Be respectful and constructive in all interactions
+- Read our [Code of Conduct](CODE_OF_CONDUCT.md)
+- For security issues, follow [SECURITY.md](SECURITY.md) and do not open a public issue
 
-If the issue is security-related, do **not** open a public issue. Follow [SECURITY.md](SECURITY.md).
+## Reporting Bugs
 
-## Local Testing Requirements
+Open a GitHub Issue and include:
 
-Before submitting a PR, verify the following:
+- A clear title and summary
+- Steps to reproduce
+- Expected behavior and actual behavior
+- Screenshots or logs when helpful (redact sensitive data)
+- Environment details (OS, Python/Node versions, browser if relevant)
 
-### Backend
-- Python 3.10+ installed
-- Nmap installed and available in PATH
-- Create `.env` from `backend/.env.example`
-- Start the API: `python server.py`
-- Run a smoke test: `curl http://localhost:8000/health`
+## Requesting Features
 
-### Frontend
-- Node.js 20+ installed
-- Create `frontend/.env` from `frontend/.env.example`
+Open a GitHub Issue with:
+
+- The problem your feature solves
+- Your proposed solution
+- Any alternatives considered
+- Optional mockups, examples, or references
+
+## Development Workflow
+
+1. Fork the repository.
+2. Create a branch from `main`:
+	- `feature/short-description` for new features
+	- `fix/short-description` for bug fixes
+	- `docs/short-description` for documentation updates
+3. Make focused changes and write clear commit messages.
+4. Run local checks and verify your changes.
+5. Open a Pull Request to `main`.
+
+## Pull Request Guidelines
+
+- Keep PRs small and focused
+- Explain what changed and why
+- Link related issues (for example: `Closes #123`)
+- Add screenshots for UI changes when possible
+- Update documentation when behavior or setup changes
+
+## Local Setup (Quick Reference)
+
+Backend:
+
+- Install dependencies: `pip install -r requirements.txt`
+- Run server: `python server.py`
+- Health check: `GET /health`
+
+Frontend:
+
+- `cd frontend`
 - Install dependencies: `npm install`
 - Start dev server: `npm run dev`
-- Optional lint: `npm run lint`
+- Lint: `npm run lint`
 
-## Code Style
+## Contributor Notes
 
-- Keep changes minimal and well-scoped.
-- Prefer clear, explicit naming over brevity.
-- Avoid committing generated files, secrets, or local artifacts.
+- Please avoid committing secrets, credentials, or sensitive scan output
+- Prefer readable code over clever code
+- If unsure about direction, open an issue first and ask
+
+Thanks again for helping improve NetSec AI Scanner.
