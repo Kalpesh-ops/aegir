@@ -40,7 +40,7 @@ export default async function DashboardPage() {
   if (!scans) {
     const { data } = await supabase
       .from('scans')
-      .select('id, target_redacted, scan_timestamp, cve_count, highest_cvss, crit_count, high_count, med_count, low_count')
+      .select('id, target_redacted, scan_timestamp, scan_mode, cve_count, highest_cvss, crit_count, high_count, med_count, low_count')
       .eq('user_id', user.id)
       .order('scan_timestamp', { ascending: false })
       .limit(50)

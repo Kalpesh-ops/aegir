@@ -108,6 +108,16 @@ function ScanCard({ scan, index }) {
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '10px', color: 'rgba(240,237,232,0.35)' }}>
           {formatDate(scan.scan_timestamp)}
         </span>
+        {scan.scan_mode && (
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: scan.scan_mode === 'pen_test' ? '#ffb340' : scan.scan_mode === 'deep' ? '#4af4ff' : '#00ff88',
+            opacity: 0.7,
+          }}>
+            {scan.scan_mode === 'pen_test' ? 'Pen Test' : scan.scan_mode === 'deep' ? 'Deep' : 'Fast'}
+          </span>
+        )}
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '10px', color: cfg.color }}>
           {scan.cve_count ?? 0} CVEs
         </span>
@@ -141,6 +151,7 @@ export default function HistoryClient({ scans }) {
   const [activeFilter, setActiveFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [modeFilter, setModeFilter] = useState('All')
   
   // Modal State
   const [showModal, setShowModal] = useState(false)
@@ -153,16 +164,20 @@ export default function HistoryClient({ scans }) {
     if (activeFilter !== 'All') {
       result = result.filter(filterFilters[activeFilter])
     }
+    if (modeFilter !== 'All') {
+      const modeMap = { Fast: 'fast', Deep: 'deep', 'Pen Test': 'pen_test' }
+      result = result.filter((s) => (s.scan_mode || 'fast') === modeMap[modeFilter])
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       result = result.filter((s) => (s.target_redacted || '').toLowerCase().includes(q))
     }
     return result
-  }, [scans, activeFilter, search])
+  }, [scans, activeFilter, modeFilter, search])
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE)
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
-  const gridKey = `${activeFilter}-${search}`
+  const gridKey = `${activeFilter}-${modeFilter}-${search}`
 
   const handleClearHistory = async () => {
     try {
@@ -248,6 +263,32 @@ export default function HistoryClient({ scans }) {
             {f}
           </button>
         ))}
+      </div>
+
+      {/* Mode Filters */}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '10px', marginBottom: '8px' }}>
+        {['All', 'Fast', 'Deep', 'Pen Test'].map((m) => {
+          const isActive = modeFilter === m
+          const color = m === 'Fast' ? '#00ff88' : m === 'Deep' ? '#4af4ff' : m === 'Pen Test' ? '#ffb340' : 'rgba(240,237,232,0.5)'
+          return (
+            <button
+              key={m}
+              onClick={() => { setModeFilter(m); setPage(1) }}
+              style={{
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', textTransform: 'uppercase',
+                letterSpacing: '0.1em', padding: '5px 14px',
+                border: isActive ? `1px solid ${color}` : '1px solid rgba(255,255,255,0.06)',
+                background: isActive ? `${color}12` : 'transparent',
+                color: isActive ? color : 'rgba(240,237,232,0.3)',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#f0ede8' } }}
+              onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(240,237,232,0.3)' } }}
+            >
+              {m === 'All' ? 'All Modes' : m}
+            </button>
+          )
+        })}
       </div>
 
       {/* Cards Grid */}

@@ -29,6 +29,7 @@ def store_scan_result(
     ports: list,
     cve_findings: list,
     ai_summary: str,
+    scan_mode="fast"
 ) -> dict:
     highest_cvss = 0.0
     crit_count = high_count = med_count = low_count = 0
@@ -54,6 +55,7 @@ def store_scan_result(
         "ports_json": json.dumps(ports),
         "cve_findings_json": json.dumps(cve_findings),
         "ai_summary": ai_summary,
+        "scan_mode": scan_mode if scan_mode else "fast",
         "cve_count": len(cve_findings),
         "highest_cvss": highest_cvss,
         "crit_count": crit_count,
