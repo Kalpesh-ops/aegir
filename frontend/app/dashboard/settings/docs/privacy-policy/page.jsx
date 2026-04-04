@@ -90,16 +90,6 @@ export default function PrivacyPolicyPage() {
       <Link
         href="/dashboard/settings"
         style={backButton}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = '#00ff88'
-          e.currentTarget.style.color = '#00ff88'
-          e.currentTarget.style.background = 'rgba(0,255,136,0.08)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
-          e.currentTarget.style.color = 'rgba(240,237,232,0.7)'
-          e.currentTarget.style.background = 'transparent'
-        }}
       >
         Back to Settings
       </Link>
