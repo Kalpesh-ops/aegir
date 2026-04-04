@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 const supabaseRef = { current: null }
@@ -171,8 +172,10 @@ export default function SettingsPage() {
     background: 'rgba(255,255,255,0.02)',
     border: '1px solid rgba(255,255,255,0.06)',
     padding: '20px 24px',
-    opacity: 0.5,
-    cursor: 'not-allowed',
+    minWidth: '220px',
+    textDecoration: 'none',
+    transition: 'all 0.2s',
+    cursor: 'pointer',
   }
 
   if (loading) {
@@ -294,18 +297,37 @@ export default function SettingsPage() {
         <p style={sectionLabel}>Legal & Documentation</p>
         <h2 style={sectionTitle}>Policies & Terms</h2>
         <p style={sectionBody}>
-          Full documentation is being prepared and will be available before public release.
+          Review policy, legal, and consent documents for system use and data handling.
         </p>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {['Privacy Policy', 'Terms of Service', 'User Consent Policy', 'Disclaimer'].map((doc) => (
-            <div key={doc} style={docCard}>
+          {[
+            { title: 'Privacy Policy', href: '/dashboard/settings/docs/privacy-policy' },
+            { title: 'Terms of Service', href: '/dashboard/settings/docs/terms-of-service' },
+            { title: 'User Consent Policy', href: '/dashboard/settings/docs/consent-policy' },
+            { title: 'Disclaimer', href: '/dashboard/settings/docs/disclaimer' },
+          ].map((doc) => (
+            <Link
+              key={doc.title}
+              href={doc.href}
+              style={docCard}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(0,255,136,0.45)'
+                e.currentTarget.style.background = 'rgba(0,255,136,0.05)'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
+                e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
               <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: 'rgba(240,237,232,0.3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '4px' }}>
-                {doc}
+                {doc.title}
               </p>
-              <p style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '12px', color: 'rgba(240,237,232,0.2)' }}>
-                Coming before public release
+              <p style={{ fontFamily: "'Instrument Sans',sans-serif", fontSize: '12px', color: 'rgba(240,237,232,0.55)' }}>
+                View document
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

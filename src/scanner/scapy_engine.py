@@ -59,4 +59,5 @@ class ScapyEngine:
 if __name__ == "__main__":
     # Windows Users: You might need to install Npcap for Scapy to work!
     scanner = ScapyEngine()
-    print(scanner.firewall_detect("8.8.8.8", 53)) # Test against Google DNS
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.info(scanner.firewall_detect("8.8.8.8", 53))  # Test against Google DNS
