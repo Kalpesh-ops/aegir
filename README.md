@@ -47,7 +47,7 @@ graph TB
         C --> C3["Settings"]
     end
 
-    subgraph "Backend — FastAPI (GCP VM)"
+    subgraph "Backend — FastAPI"
         D["API Gateway<br/>Rate Limiting + JWT Auth"]
         D --> E["Job Queue<br/>(SQLite)"]
         E --> F["Background Worker"]
@@ -510,7 +510,6 @@ curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
 | **Supabase (PostgreSQL)** | Auth, scan history, global AI cache, consent |
 | **CIRCL CVE Database** | Public CVE lookup API (247K+ entries) |
 | **Vercel** | Frontend hosting (Edge CDN + SSR) |
-| **GCP Compute Engine** | Backend hosting (e2-micro, Always Free Tier) |
 
 ---
 
@@ -524,7 +523,7 @@ curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
 | Layer | Platform | Details |
 |---|---|---|
 | **Frontend** | Vercel | Next.js SSR, Edge CDN, auto HTTPS |
-| **Backend** | GCP (e2-micro) | Ubuntu + Nginx reverse proxy, Let's Encrypt SSL |
+| **Backend** | Self-hosted | Ubuntu + Nginx reverse proxy, Let's Encrypt SSL |
 | **Database** | Supabase | Managed PostgreSQL with Row-Level Security |
 | **DNS** | `.nip.io` wildcard | SSL certificate validation for IP-based domains |
 

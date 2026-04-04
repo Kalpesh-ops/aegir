@@ -6,7 +6,7 @@
 
 ## Abstract
 
-This report presents a comprehensive technical analysis of NetSec AI Scanner, an automated network vulnerability scanning system augmented with artificial intelligence. The system integrates industry-standard reconnaissance tools (Nmap, Scapy, TShark) with Google's Gemini 2.5 Flash AI model to transform raw network telemetry into actionable security intelligence. This report details the system architecture, implementation methodology, performance benchmarks, security considerations, and comparative analysis with existing tools. Testing results demonstrate that the system achieves sub-second data sanitization (<3ms), efficient token optimization, and generates executive-grade threat reports from complex network scans. The hybrid cloud deployment architecture (Vercel + GCP) enables zero-cost operation while maintaining enterprise-grade security with end-to-end encryption.
+This report presents a comprehensive technical analysis of NetSec AI Scanner, an automated network vulnerability scanning system augmented with artificial intelligence. The system integrates industry-standard reconnaissance tools (Nmap, Scapy, TShark) with Google's Gemini 2.5 Flash AI model to transform raw network telemetry into actionable security intelligence. This report details the system architecture, implementation methodology, performance benchmarks, security considerations, and comparative analysis with existing tools. Testing results demonstrate that the system achieves sub-second data sanitization (<3ms), efficient token optimization, and generates executive-grade threat reports from complex network scans. The flexible deployment architecture enables zero-cost operation while maintaining enterprise-grade security with end-to-end encryption.
 
 **Keywords**: Network Security, Vulnerability Assessment, Artificial Intelligence, Penetration Testing, FastAPI, React, Google Gemini
 
@@ -175,7 +175,6 @@ Dashboard Visualization → Export Options
 
 #### Cloud Infrastructure
 - **Frontend Hosting**: Vercel (edge network, auto-scaling)
-- **Backend Hosting**: Google Cloud Platform e2-micro (1 vCPU, 1GB RAM)
 - **SSL/TLS**: Let's Encrypt (automated cert renewal)
 - **DNS**: nip.io wildcard DNS for SSL validation
 
@@ -741,7 +740,7 @@ Token Optimization → AI Analysis → Report Generation → Frontend Display
 **Assets:**
 - User scan data (network topology, open ports)
 - API keys (Google Gemini credentials)
-- Backend infrastructure (GCP VM)
+- Backend infrastructure
 
 **Threat Actors:**
 - External attackers (API abuse, DDoS)
@@ -779,7 +778,7 @@ def validate_target(target: str):
 
 #### 7.2.3 Secrets Management
 - **Environment Variables**: API keys stored in `.env` (not committed)
-- **Production**: GCP Secret Manager integration
+    - **Production**: Server secrets manager (environment variables, HashiCorp Vault, etc.)
 - **Rotation**: Manual key rotation (automated rotation recommended)
 
 #### 7.2.4 Network Security
@@ -810,7 +809,7 @@ def validate_target(target: str):
 
 ### 8.1 Production Deployment Overview
 
-**Hybrid Cloud Architecture:**
+**Deployment Architecture:**
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -826,12 +825,13 @@ def validate_target(target: str):
 └──────────────────┬─────────────────────────────────────────┘
                    │ REST API (HTTPS)
 ┌──────────────────▼─────────────────────────────────────────┐
-│          GCP COMPUTE ENGINE (Backend)                       │
+│          BACKEND SERVER                                     │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  e2-micro (1 vCPU, 1GB RAM)                          │  │
-│  │  Region: us-central1-a (Iowa)                        │  │
-│  │  OS: Ubuntu 22.04 LTS                                │  │
-│  │  Swap: 2GB (handles memory spikes)                   │  │
+│  │  Server Specifications                               │  │
+│  │  • 1+ vCPU(s)                                         │  │
+│  │  • 1GB+ RAM minimum                                  │  │
+│  │  • OS: Ubuntu 22.04 LTS or similar                   │  │
+│  │  • Swap: 2GB (handles memory spikes)                 │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -846,15 +846,14 @@ def validate_target(target: str):
 │  │  FASTAPI APPLICATION (Uvicorn)                       │  │
 │  │  • Process: systemd service (auto-restart)           │  │
 │  │  • Port: 8000 (internal only)                        │  │
-│  │  • Workers: 1 (single-core VM)                       │  │
+│  │  • Workers: 1 (single-threaded, supports scaling)    │  │
 │  └──────────────────────────────────────────────────────┘  │
 └──────────────────┬─────────────────────────────────────────┘
                    │ HTTPS API Call
 ┌──────────────────▼─────────────────────────────────────────┐
 │          GOOGLE GEMINI API (Cloud AI)                       │
 │  • Model: gemini-2.5-flash                                 │
-│  • Authentication: API Key (Secret Manager)                │
-│  • Region: us-central1 (co-located for latency)           │
+│  • Authentication: API Key                                 │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -885,14 +884,13 @@ VITE_API_URL=https://<backend-ip>.nip.io
 - **LCP**: <1.5s (Lighthouse)
 - **CDN**: 150+ edge locations
 
-#### 8.2.2 Backend (GCP)
-**VM Specifications:**
+#### 8.2.2 Backend
+**Server Specifications:**
 ```
-Instance Type: e2-micro (Always Free Tier)
-vCPUs: 1 (shared)
-Memory: 1GB RAM + 2GB Swap
-Disk: 10GB SSD (Debian/Ubuntu)
-Network: 1Gbps egress (1GB/month free)
+vCPUs: 1 or more
+Memory: 1GB+ RAM + 2GB Swap recommended
+Disk: 10GB SSD minimum (Ubuntu 22.04 LTS or similar)
+Network: 1Gbps+ recommended
 ```
 
 **Nginx Configuration:**
@@ -949,28 +947,27 @@ sudo certbot certonly --standalone \
 **Pre-Deployment:**
 - [ ] Set environment variables (`.env` files)
 - [ ] Configure CORS origins (restrict to production frontend)
-- [ ] Enable firewall rules (GCP: allow 80, 443, deny 22)
+- [ ] Enable firewall rules (allow 80, 443, deny SSH if not needed)
 - [ ] Set up SSL certificates (Let's Encrypt)
 
 **Post-Deployment:**
 - [ ] Test all scan modes (fast, deep, pen_test)
 - [ ] Verify AI analysis (check Gemini API quota)
 - [ ] Monitor logs (`journalctl -u netsec -f`)
-- [ ] Configure backups (GCP snapshots)
+- [ ] Configure backups (server snapshots or disk images)
 
 ### 8.4 Cost Analysis (Zero-Cost Deployment)
 
-| Service | Tier | Cost | Limits |
-|---------|------|------|--------|
+| Service | Tier | Cost | Notes |
+|---------|------|------|-------|
 | **Vercel** | Hobby | $0/mo | 100GB bandwidth, unlimited deployments |
-| **GCP Compute** | Free Tier | $0/mo | 1x e2-micro (US regions), 30GB egress |
+| **Backend Server** | Variable | Varies | Depends on hosting provider (free tier often available) |
 | **Google Gemini** | Free Tier | $0/mo | 15 RPM, 1M tokens/day |
 | **Let's Encrypt** | Free | $0/mo | Unlimited certificates |
-| **Total** | | **$0/mo** | Sufficient for personal/demo use |
 
-**Scaling Costs (Beyond Free Tier):**
-- **GCP e2-small** (2GB RAM): ~$13/mo
-- **Gemini Pro 1.5**: $0.35/1M input tokens, $1.05/1M output tokens
+**Scaling Considerations:**
+- **Backend Server**: Upgrade as needed for concurrent load
+- **Gemini API**: $0.35/1M input tokens, $1.05/1M output tokens (paid tier)
 - **Vercel Pro**: $20/mo (1TB bandwidth)
 
 ---
@@ -987,7 +984,7 @@ sudo certbot certonly --standalone \
 5. **Cloud Compatibility**: Nmap SYN scan unavailable in unprivileged environments
 
 #### 9.1.2 Scalability Constraints
-- **Concurrent Scans**: Limited to 1-2 on free-tier VM (1GB RAM)
+- **Concurrent Scans**: 1-2 on minimal hardware (1GB RAM)
 - **Deep Scans**: 90-180 seconds per target (blocking operation)
 - **AI Quota**: 15 requests/minute (Gemini free tier)
 
@@ -1070,7 +1067,7 @@ This report presents **NetSec AI Scanner**, a novel network security tool that b
 
 3. **Graceful Degradation**: Intelligent fallback from Scapy packet injection to Nmap inference for firewall detection, enabling cloud deployment without elevated privileges.
 
-4. **Zero-Cost Production Deployment**: Leverages free-tier cloud services (Vercel + GCP + Gemini) to provide enterprise-grade security scanning at zero operational cost.
+4. **Zero-Cost Production Deployment**: Leverages free-tier cloud services (Vercel + Gemini) to provide enterprise-grade security scanning at minimal operational cost.
 
 ### 10.2 Performance Summary
 
@@ -1161,9 +1158,6 @@ As AI models continue to improve in reasoning capabilities (e.g., GPT-5, Gemini 
 
 13. Vercel. (2024). *Vercel Platform Documentation*. https://vercel.com/docs
 
-14. Google Cloud Platform. (2024). *Compute Engine Documentation*. https://cloud.google.com/compute/docs
-
-### Security Resources
 15. CVE Details. (2024). *Common Vulnerabilities and Exposures Database*. https://www.cvedetails.com/
 
 16. SANS Institute. (2023). *SANS Penetration Testing Resources*. https://www.sans.org/
