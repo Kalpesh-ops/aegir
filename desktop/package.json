@@ -1,0 +1,46 @@
+{
+  "name": "netsec-ai-scanner",
+  "version": "1.0.0",
+  "main": "main.js",
+  "build": {
+    "appId": "com.kalpesh.netsec",
+    "productName": "NetSec AI Scanner",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "extraResources": [
+      {
+        "from": "../dist/netsec-backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../frontend/.next/standalone",
+        "to": "frontend",
+        "filter": ["**/*"]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Kalpesh-ops",
+        "repo": "netsec-ai-scanner"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  }
+}

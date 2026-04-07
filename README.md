@@ -412,6 +412,32 @@ npm run dev
 ```
 Frontend available at `http://localhost:3000`
 
+### Windows Desktop Packaging (Electron + EXE)
+
+The project includes a Windows desktop wrapper in `desktop/`.
+
+#### 1. Build backend executable
+```bash
+pyinstaller netsec-backend.spec
+```
+This generates the backend bundle under `dist/netsec-backend/`.
+
+#### 2. Build frontend standalone bundle
+```bash
+cd frontend
+npm install
+npm run build
+```
+This generates the standalone runtime under `frontend/.next/standalone/`.
+
+#### 3. Build Windows installer
+```bash
+cd desktop
+npm install
+npx electron-builder --win nsis
+```
+The generated installer/executable artifacts are placed in `desktop/dist/`.
+
 ### API Endpoints
 
 | Method | Endpoint | Auth | Description |
@@ -423,6 +449,7 @@ Frontend available at `http://localhost:3000`
 | `GET` | `/api/consent` | JWT | Check user consent status |
 | `POST` | `/api/consent` | JWT | Grant consent for advanced scans |
 | `DELETE` | `/api/consent` | JWT | Revoke consent |
+| `POST` | `/api/settings/apikey` | — | Save local Gemini API key (BYOK) |
 | `POST` | `/api/analyze` | — | Direct AI analysis (rate-limited) |
 | `GET` | `/health` | — | Health check |
 
