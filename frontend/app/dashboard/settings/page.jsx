@@ -18,7 +18,8 @@ function getSupabase() {
   return supabaseRef.current
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// CRITICAL FIX: Match FastAPI's binding exactly to prevent CORS/Networking drops
+const API_URL = 'http://127.0.0.1:8000'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -27,11 +28,16 @@ export default function SettingsPage() {
   const [token, setToken]               = useState(null)
   const [userEmail, setUserEmail]       = useState('')
 
+  // BYOK State
+  const [apiKey, setApiKey]             = useState('')
+  const [keyStatus, setKeyStatus]       = useState(null)
+  const [keyWorking, setKeyWorking]     = useState(false)
+
   // Consent state
-  const [consentStatus, setConsentStatus] = useState(null) // null=loading, true, false
+  const [consentStatus, setConsentStatus] = useState(null)
   const [consentChecked, setConsentChecked] = useState(false)
   const [consentWorking, setConsentWorking] = useState(false)
-  const [consentMsg, setConsentMsg]     = useState(null) // {type:'ok'|'err', text}
+  const [consentMsg, setConsentMsg]     = useState(null)
 
   useEffect(() => {
     async function init() {
@@ -56,6 +62,28 @@ export default function SettingsPage() {
     } catch {
       setConsentStatus(false)
     }
+  }
+
+  async function handleSaveKey() {
+    if (!apiKey.trim()) return
+    setKeyWorking(true)
+    setKeyStatus(null)
+    try {
+      const res = await fetch(`${API_URL}/api/settings/apikey`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+      })
+      if (res.ok) {
+        setKeyStatus({ type: 'ok', text: 'API Key securely saved to local SQLite database.' })
+        setApiKey('') // Clear input for security
+      } else {
+        setKeyStatus({ type: 'err', text: 'Failed to save key. Check backend logs.' })
+      }
+    } catch {
+      setKeyStatus({ type: 'err', text: 'Could not reach backend.' })
+    }
+    setKeyWorking(false)
   }
 
   async function handleGrantConsent() {
@@ -204,7 +232,48 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* ── Section 1: Advanced Scan Consent ── */}
+      {/* ── Section 1: Gemini API Configuration (BYOK) ── */}
+      <div style={sectionCard}>
+        <p style={sectionLabel}>Local AI Engine</p>
+        <h2 style={sectionTitle}>Gemini API Key (BYOK)</h2>
+        <p style={sectionBody}>
+          To analyze vulnerabilities privately, enter your Google Gemini API Key.
+          This key is stored securely in your local SQLite database and is never sent to our servers.
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <input
+            type="password"
+            placeholder="AIzaSy..."
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            style={{
+              flex: 1,
+              background: 'rgba(0,0,0,0.2)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              padding: '10px 16px',
+              color: '#f0ede8',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '12px',
+              outline: 'none',
+            }}
+          />
+          <button
+            disabled={keyWorking || !apiKey.trim()}
+            onClick={handleSaveKey}
+            style={btnPrimary(keyWorking || !apiKey.trim())}
+          >
+            {keyWorking ? 'Saving...' : 'Save Key'}
+          </button>
+        </div>
+        {keyStatus && (
+          <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: keyStatus.type === 'ok' ? '#00ff88' : '#ff4560' }}>
+            {keyStatus.text}
+          </p>
+        )}
+      </div>
+
+      {/* ── Section 2: Advanced Scan Consent ── */}
       <div style={sectionCard}>
         <p style={sectionLabel}>Advanced Scan Modes</p>
         <h2 style={sectionTitle}>System-Level Access Consent</h2>
@@ -292,7 +361,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* ── Section 2: Documentation ── */}
+      {/* ── Section 3: Documentation ── */}
       <div style={sectionCard}>
         <p style={sectionLabel}>Legal & Documentation</p>
         <h2 style={sectionTitle}>Policies & Terms</h2>
@@ -332,7 +401,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ── Section 3: About ── */}
+      {/* ── Section 4: About ── */}
       <div style={{ ...sectionCard, marginBottom: 0 }}>
         <p style={sectionLabel}>About</p>
         <h2 style={sectionTitle}>NetSec AI Scanner</h2>

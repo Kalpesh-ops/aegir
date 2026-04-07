@@ -553,6 +553,18 @@ async def analyze_scan(request: Request, data: dict):
         raise HTTPException(status_code=500, detail="Analysis failed")
 
 
+class APIKeyRequest(BaseModel):
+    api_key: str
+
+@app.post("/api/settings/apikey")
+async def update_api_key(request: APIKeyRequest):
+    """Save user's Gemini API key to local SQLite DB."""
+    success = ai_agent.save_user_api_key(request.api_key)
+    if success:
+        return {"status": "success", "message": "API Key saved securely."}
+    return {"status": "error", "message": "Failed to save API Key."}
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -560,8 +572,15 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    import sys
+    import os
     import uvicorn
     from src.queue.worker import run_worker
+
+    if sys.stdout is None or sys.stderr is None:
+        log_file = open("netsec-backend.log", "a")
+        sys.stdout = log_file
+        sys.stderr = log_file
 
     threading.Thread(target=run_worker, daemon=True).start()
     logging.info("[*] Starting NetSec AI Kernel on http://127.0.0.1:8000")

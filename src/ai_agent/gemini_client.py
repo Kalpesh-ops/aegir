@@ -18,8 +18,6 @@ try:
 except ImportError:
     from prompts import SYSTEM_PROMPT
 
-# CRITICAL: Load environment variables BEFORE any class initialization
-# This ensures GOOGLE_API_KEY is available when server.py instantiates GeminiAgent
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -28,14 +26,6 @@ CACHE_DB = Path("data/ai_cache.db")
 
 class GeminiAgent:
     def __init__(self):
-        self.api_key = os.getenv("GOOGLE_API_KEY")
-        if not self.api_key:
-            logger.error("GOOGLE_API_KEY not found in environment variables.")
-            raise ValueError("Missing GOOGLE_API_KEY")
-
-        genai.configure(api_key=self.api_key)
-
-        # Restored original robust model fallback logic
         self.preferred_models = [
             "gemini-2.5-flash",
             "gemini-2.0-flash",
@@ -45,26 +35,19 @@ class GeminiAgent:
 
         self.model = None
         self.current_model_name = None
-        self._initialize_model()
-        self._init_cache()
-
-    def _initialize_model(self):
-        """Iterates through preferred models and initializes the first one that works."""
-        for model_name in self.preferred_models:
-            try:
-                self.model = genai.GenerativeModel(model_name)
-                self.current_model_name = model_name
-                logger.info(f"Initialized Gemini model: {self.current_model_name}")
-                return
-            except Exception as e:
-                logger.warning(f"Could not init {model_name}: {e}")
         
-        raise RuntimeError("Could not initialize any Gemini models. Check API Key.")
+        # Always init the cache/db first
+        self._init_cache()
+        
+        # Try to initialize the model if a key exists (from DB or .env)
+        self.try_initialize_model()
 
     def _init_cache(self):
-        """Initializes the local SQLite cache for AI reports."""
+        """Initializes the local SQLite cache for AI reports and settings."""
         CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(CACHE_DB)
+        
+        # Existing reports table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ai_reports (
                 signature TEXT PRIMARY KEY,
@@ -72,14 +55,83 @@ class GeminiAgent:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # NEW: Settings table for BYOK
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                config_key TEXT PRIMARY KEY,
+                config_value TEXT
+            )
+        """)
         conn.commit()
         conn.close()
 
+    def get_user_api_key(self) -> str:
+        """Retrieves the user's API key from local DB, falling back to .env"""
+        try:
+            conn = sqlite3.connect(CACHE_DB)
+            cursor = conn.cursor()
+            cursor.execute("SELECT config_value FROM settings WHERE config_key = 'google_api_key'")
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row and row[0]:
+                return row[0]
+        except Exception as e:
+            logger.warning(f"Error reading API key from DB: {e}")
+            
+        # Fallback for local development
+        return os.getenv("GOOGLE_API_KEY")
+
+    def save_user_api_key(self, api_key: str):
+        """Saves the user's API key to the local SQLite DB and re-initializes the model."""
+        try:
+            conn = sqlite3.connect(CACHE_DB)
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (config_key, config_value) VALUES (?, ?)",
+                ('google_api_key', api_key)
+            )
+            conn.commit()
+            conn.close()
+            
+            # Immediately try to apply the new key
+            self.try_initialize_model()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save API key: {e}")
+            return False
+
+    def try_initialize_model(self):
+        """Attempts to configure genai and initialize the model."""
+        api_key = self.get_user_api_key()
+        
+        if not api_key:
+            logger.info("No Gemini API key found. Waiting for user to provide one.")
+            self.model = None
+            return False
+
+        try:
+            genai.configure(api_key=api_key)
+            for model_name in self.preferred_models:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    self.current_model_name = model_name
+                    logger.info(f"Initialized Gemini model: {self.current_model_name}")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Could not init {model_name}: {e}")
+            
+            logger.error("Could not initialize any Gemini models with the provided key.")
+            self.model = None
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini API: {e}")
+            self.model = None
+            return False
+
     def _generate_signature(self, ports: List[Dict], cves: List[Dict]) -> str:
-        """
-        Generates a privacy-safe SHA-256 hash of the vulnerability profile.
-        Strips all IPs, timestamps, and user data. Sorts data to ensure consistent hashes.
-        """
+        """Generates a privacy-safe SHA-256 hash of the vulnerability profile."""
         profile = []
         for p in ports:
             port_num = p.get("portid") or p.get("port") or p.get("port_number", "0")
@@ -122,10 +174,7 @@ class GeminiAgent:
             logger.warning(f"Cache write error: {e}")
 
     def analyze_scan(self, ports: List[Dict], cves: List[Dict]) -> str:
-        """
-        Analyzes scan results cascading through: 
-        1. Local SQLite -> 2. Global Supabase -> 3. Gemini API
-        """
+        """Analyzes scan results cascading through the 3-Tier Cache."""
         signature = self._generate_signature(ports, cves)
         logger.info(f"Scan Signature Generated: {signature[:8]}...")
 
@@ -139,13 +188,19 @@ class GeminiAgent:
         global_report = get_global_cached_report(signature)
         if global_report:
             logger.info("[✓] AI Report retrieved from GLOBAL cache")
-            self._cache_report(signature, global_report) # Save locally for next time
+            self._cache_report(signature, global_report) # Save locally
             return global_report
 
         # Tier 3: Fallback to Gemini API
+        # CRITICAL BYOK CHECK: Ensure model is initialized before hitting API
+        if not self.model:
+            # Try one more time in case they just added it
+            if not self.try_initialize_model():
+                logger.error("Scan analysis aborted: No valid Gemini API Key.")
+                return "Error: Gemini API Key is missing or invalid. Please configure your API key in the application settings."
+
         logger.info(f"Signature not found globally. Sending data to {self.current_model_name}...")
         
-        # Restored original prompt construction
         payload = {"ports": ports, "cve_findings": cves}
         scan_json_str = json.dumps(payload, indent=2)
         prompt = f"{SYSTEM_PROMPT}\n\nHere is the scan data: \n\n{scan_json_str}"
@@ -157,7 +212,6 @@ class GeminiAgent:
             )
             report_text = response.text
             
-            # Save to both caches for future use
             self._cache_report(signature, report_text)
             store_global_cached_report(signature, report_text)
             
