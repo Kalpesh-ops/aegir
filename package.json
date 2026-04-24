@@ -1,0 +1,40 @@
+{
+  "name": "netsec-ai-scanner",
+  "productName": "NetSec AI Scanner",
+  "version": "2.1.0",
+  "description": "Local-first network security scanner with AI-generated remediation.",
+  "author": {
+    "name": "Kalpesh",
+    "email": "welldonejason111@gmail.com"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Kalpesh-ops/netsec-ai-scanner",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "electron:dev": "cross-env NETSEC_ELECTRON_DEV=1 electron .",
+    "electron:start": "electron .",
+    "electron:build": "electron-builder --config electron-builder.yml",
+    "electron:build:win": "electron-builder --config electron-builder.yml --win",
+    "electron:build:mac": "electron-builder --config electron-builder.yml --mac",
+    "electron:build:linux": "electron-builder --config electron-builder.yml --linux",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "dev": "concurrently -n backend,frontend,electron -c blue,green,magenta \"npm:backend:dev\" \"npm:frontend:dev\" \"wait-on http://127.0.0.1:3000 && npm run electron:dev\"",
+    "backend:dev": "python server.py"
+  },
+  "dependencies": {
+    "electron-log": "5.2.3",
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "concurrently": "9.1.2",
+    "cross-env": "7.0.3",
+    "electron": "33.4.1",
+    "electron-builder": "25.1.8",
+    "wait-on": "8.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

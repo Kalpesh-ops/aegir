@@ -412,6 +412,27 @@ npm run dev
 ```
 Frontend available at `http://localhost:3000`
 
+#### Run as an Electron desktop app (optional)
+
+The Electron shell launches the Python backend + Next frontend together in a
+single window, with auto-update hooks wired against GitHub Releases. See
+[`docs/architecture/electron.md`](docs/architecture/electron.md) for the full
+three-process model, security posture, and packaging roadmap.
+
+```bash
+# one-time
+npm install
+npm --prefix frontend install
+
+# launches backend + next dev + electron, with coloured log streams
+npm run dev
+```
+
+Packaged installers (Windows NSIS, macOS DMG, Linux AppImage) are produced by
+`npm run electron:build:win|mac|linux` — Python bundling via PyInstaller and
+Windows EV code-signing are tracked as follow-up PRs and are **not required
+for development use**.
+
 ### API Endpoints
 
 | Method | Endpoint | Auth | Description |
