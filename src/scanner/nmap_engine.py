@@ -4,8 +4,10 @@ import socket
 import shutil
 import os
 import subprocess
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET  # safe against billion-laughs, etc.
 from tempfile import NamedTemporaryFile
+
+from src.utils.validators import validate_target, TargetValidationError
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -123,12 +125,22 @@ class NmapScanner:
             {"error": str} dict on failure.
         """
         try:
+            # Defence-in-depth: server-level validation happens before the job
+            # is queued, but the scanner re-validates in case the worker is
+            # called directly (tests, future entry points). Rejects leading
+            # dashes, whitespace, and public DNS targets (H-1, H-2).
+            try:
+                validate_target(target)
+            except TargetValidationError as exc:
+                logging.error(f"Rejected target: {exc}")
+                return {"error": "Invalid target."}
+
             socket.gethostbyname(target)
 
             if fast_mode is not None:
                 mode = "fast" if fast_mode else "deep"
 
-            logging.info(f"Starting {mode} scan on target: {target}...")
+            logging.info(f"Starting {mode} scan...")
 
             scan_args = self._build_args(mode)
 
@@ -136,8 +148,17 @@ class NmapScanner:
                 tmp_path = tmp.name
 
             try:
-                cmd = [self.nmap_path] + scan_args.split() + ["-oX", tmp_path, target]
-                logging.info(f"Executing: {' '.join(cmd)}")
+                # ``--`` tells nmap that every following argv entry is a
+                # positional target; without it, a target beginning with ``-``
+                # would be interpreted as an option flag. validate_target()
+                # already forbids leading dashes, but this keeps the contract
+                # explicit (H-2).
+                cmd = (
+                    [self.nmap_path]
+                    + scan_args.split()
+                    + ["-oX", tmp_path, "--", target]
+                )
+                logging.info(f"Executing nmap in {mode} mode")
 
                 result = subprocess.run(
                     cmd, capture_output=True, text=True, timeout=300
@@ -163,10 +184,10 @@ class NmapScanner:
             logging.error("Nmap scan timed out after 300 seconds")
             return {"error": "Nmap scan timed out after 300 seconds"}
         except socket.gaierror:
-            logging.error(f"DNS resolution failed for target: {target}")
+            logging.error("DNS resolution failed for target")
             return {"error": "DNS resolution failed for the specified target."}
         except Exception:
-            logging.exception(f"Scan failed for target: {target}")
+            logging.exception("Scan failed")
             return {"error": "Scan failed. See server logs for details."}
 
     def run_scan_xml(self, target, mode="fast"):

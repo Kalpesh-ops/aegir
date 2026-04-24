@@ -11,6 +11,8 @@ import google.generativeai as genai
 from google.generativeai.types import helper_types
 
 from src.database.supabase_client import get_global_cached_report, store_global_cached_report
+from src.utils.data_sanitizer import redact_report_text
+from src.utils.secrets import decrypt_str, encrypt_str
 
 # Handle prompt import safely
 try:
@@ -66,37 +68,63 @@ class GeminiAgent:
         conn.commit()
         conn.close()
 
-    def get_user_api_key(self) -> str:
-        """Retrieves the user's API key from local DB, falling back to .env"""
+    def get_user_api_key(self) -> str | None:
+        """
+        Retrieves the user's API key from the local DB, falling back to .env.
+
+        The DB column stores a Fernet-encrypted token; legacy plaintext rows
+        are tolerated and transparently upgraded the next time the key is
+        saved. If decryption fails (e.g. the install key was rotated) we fall
+        through to the env var so the app can still run with a fresh key.
+        """
         try:
             conn = sqlite3.connect(CACHE_DB)
             cursor = conn.cursor()
             cursor.execute("SELECT config_value FROM settings WHERE config_key = 'google_api_key'")
             row = cursor.fetchone()
             conn.close()
-            
+
             if row and row[0]:
-                return row[0]
+                stored = row[0]
+                # New rows are Fernet tokens; they are base64 and typically
+                # over 64 chars. If decryption succeeds, prefer it.
+                decrypted = decrypt_str(stored)
+                if decrypted:
+                    return decrypted
+                # Legacy plaintext row — still usable, but encourage re-save.
+                logger.info("Legacy unencrypted API key found; will be encrypted on next save")
+                return stored
         except Exception as e:
             logger.warning(f"Error reading API key from DB: {e}")
-            
+
         # Fallback for local development
         return os.getenv("GOOGLE_API_KEY")
 
-    def save_user_api_key(self, api_key: str):
-        """Saves the user's API key to the local SQLite DB and re-initializes the model."""
+    def save_user_api_key(self, api_key: str) -> bool:
+        """
+        Saves the user's API key encrypted at rest.
+
+        Returns ``True`` when the key was persisted and successfully applied
+        to the live ``genai`` configuration; ``False`` otherwise.
+        """
+        if not api_key or not isinstance(api_key, str):
+            return False
+        api_key = api_key.strip()
+        if not api_key:
+            return False
+
         try:
+            encrypted = encrypt_str(api_key)
             conn = sqlite3.connect(CACHE_DB)
             conn.execute(
                 "INSERT OR REPLACE INTO settings (config_key, config_value) VALUES (?, ?)",
-                ('google_api_key', api_key)
+                ("google_api_key", encrypted),
             )
             conn.commit()
             conn.close()
-            
+
             # Immediately try to apply the new key
-            self.try_initialize_model()
-            return True
+            return self.try_initialize_model()
         except Exception as e:
             logger.error(f"Failed to save API key: {e}")
             return False
@@ -131,21 +159,27 @@ class GeminiAgent:
             return False
 
     def _generate_signature(self, ports: List[Dict], cves: List[Dict]) -> str:
-        """Generates a privacy-safe SHA-256 hash of the vulnerability profile."""
+        """
+        Generates a privacy-safe SHA-256 hash of the vulnerability profile.
+
+        Includes ``version`` in the key so two scans of the same product at
+        different patch levels no longer collide in the cache (M-1).
+        """
         profile = []
         for p in ports:
             port_num = p.get("portid") or p.get("port") or p.get("port_number", "0")
             service = p.get("service", "unknown")
             product = p.get("product", "unknown")
-            profile.append(f"{port_num}:{service}:{product}")
-            
+            version = p.get("version", "unknown")
+            profile.append(f"{port_num}:{service}:{product}:{version}")
+
         cve_list = [c.get("cve_id", "") for c in cves if c.get("cve_id")]
-        
+
         profile.sort()
         cve_list.sort()
-        
+
         signature_data = f"PORTS:{'|'.join(profile)}||CVES:{'|'.join(cve_list)}"
-        return hashlib.sha256(signature_data.encode('utf-8')).hexdigest()
+        return hashlib.sha256(signature_data.encode("utf-8")).hexdigest()
 
     def _get_cached_report(self, signature: str) -> str:
         """Retrieves a report from the local cache."""
@@ -212,12 +246,17 @@ class GeminiAgent:
             )
             report_text = response.text
             
+            # Always cache locally (private to this install). Only push to the
+            # global Supabase cache after a second-pass scrub of the AI output;
+            # any IP/hostname/email the model *wrote into its own prose* must
+            # not leak across tenants (M-1).
             self._cache_report(signature, report_text)
-            store_global_cached_report(signature, report_text)
-            
-            logger.info("[✓] AI analysis complete and cached globally")
+            redacted_for_global = redact_report_text(report_text)
+            store_global_cached_report(signature, redacted_for_global)
+
+            logger.info("[✓] AI analysis complete and cached globally (redacted copy)")
             return report_text
-            
+
         except Exception as e:
             logger.error(f"Gemini API Error: {e}")
-            return f"Error: Could not generate AI analysis. {str(e)}"
+            return "Error: Could not generate AI analysis. See server logs for details."

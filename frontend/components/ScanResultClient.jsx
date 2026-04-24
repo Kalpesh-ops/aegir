@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -268,7 +269,7 @@ export default function ScanResultClient({
               overflowY: 'auto',
             }}>
               {ai_summary ? (
-                <ReactMarkdown components={markdownComponents}>{ai_summary}</ReactMarkdown>
+                <ReactMarkdown components={markdownComponents} rehypePlugins={[rehypeSanitize]}>{ai_summary}</ReactMarkdown>
               ) : (
                 <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', color: 'rgba(240,237,232,0.3)' }}>
                   No AI report generated for this scan.

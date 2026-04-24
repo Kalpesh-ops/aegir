@@ -176,6 +176,11 @@ def run_worker() -> None:
 
             mark_running(job_id)
 
+            # Reset per-job flags so a previously-degraded CIRCL session does
+            # not leak into this run.
+            circl.degraded = False
+            circl.last_error = None
+
             try:
                 scan_result = scanner.run_scan(target, mode=scan_mode)
                 if isinstance(scan_result, dict) and "error" in scan_result:
@@ -212,7 +217,11 @@ def run_worker() -> None:
                     "ports": redacted["ports"],
                     "cve_findings": redacted["cve_findings"],
                     "ai_summary": ai_summary,
-                    **extra,  # firewall and/or traffic data per mode
+                    # Surface CVE-enrichment health to the UI so users know
+                    # when a zero-CVE result means "no CVEs found" vs.
+                    # "CIRCL was unreachable" (M-3).
+                    "cve_enrichment": "degraded" if circl.degraded else "ok",
+                    **extra,
                 }
 
                 mark_complete(job_id, result)

@@ -104,6 +104,33 @@ def get_user_scans(user_id: str) -> list[dict]:
         .data
     )
 
+
+def delete_user_scans(user_id: str) -> int:
+    """Delete every ``scans`` row owned by ``user_id``. Returns affected count."""
+    response = (
+        _get_client()
+        .table("scans")
+        .delete()
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return len(response.data or [])
+
+
+def delete_user_account_data(user_id: str) -> dict:
+    """
+    Erase every row associated with ``user_id`` across all backend tables
+    (GDPR-style right to erasure). The global AI cache is keyed by scan
+    *signature*, not user id, so it is intentionally left in place.
+    """
+    client = _get_client()
+    deleted_scans = delete_user_scans(user_id)
+    try:
+        client.table("user_consent").delete().eq("user_id", user_id).execute()
+    except Exception as e:
+        logger.warning(f"[Supabase] Failed to clear consent for user: {e}")
+    return {"deleted_scans": deleted_scans, "consent_cleared": True}
+
 def get_global_cached_report(signature: str) -> str:
     """Pulls a cached AI report from the global Supabase hive mind."""
     try:

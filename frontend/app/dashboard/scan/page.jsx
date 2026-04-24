@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import rehypeSanitize from 'rehype-sanitize'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -73,30 +74,20 @@ async function pollScan(token, scanId) {
   return res.json()
 }
 
-async function analyzeScan(token, ports, cveFindings) {
+async function analyzeScan(token, openPorts, cveFindings) {
   const res = await fetch(`${API_URL}/api/analyze`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ ports, cve_findings: cveFindings }),
+    body: JSON.stringify({ open_ports: openPorts, cve_findings: cveFindings }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
     throw new Error(err.detail || `HTTP ${res.status}`)
   }
   return res.json()
-}
-
-function sanitize(markdown) {
-  if (typeof window === 'undefined') return markdown
-  try {
-    const DOMPurify = require('dompurify')
-    return DOMPurify.sanitize(markdown)
-  } catch (_) {
-    return markdown
-  }
 }
 
 const scanMessages = [
@@ -696,7 +687,9 @@ export default function ScanPage() {
                 overflowY: 'auto',
               }}>
                 <div className="prose-netsec">
-                  <ReactMarkdown>{results.ai_summary || 'No report generated.'}</ReactMarkdown>
+                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+                    {results.ai_summary || 'No report generated.'}
+                  </ReactMarkdown>
                 </div>
               </div>
             )}
