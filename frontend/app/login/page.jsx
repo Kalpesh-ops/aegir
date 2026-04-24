@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
+import { createBrowserClient } from '@supabase/ssr'
 import ParticleBackground from '@/components/ParticleBackground'
 
 export default function LoginPage() {
@@ -15,16 +16,16 @@ export default function LoginPage() {
 
   function getSupabase() {
     if (!supabaseRef.current) {
-      let createBrowserClient
-      try {
-        createBrowserClient = require('@supabase/ssr').createBrowserClient
-      } catch {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!url || !key) {
+        setMessage({
+          type: 'error',
+          text: 'Authentication is not configured. Please check environment variables.',
+        })
         return null
       }
-      supabaseRef.current = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      )
+      supabaseRef.current = createBrowserClient(url, key)
     }
     return supabaseRef.current
   }
@@ -34,13 +35,19 @@ export default function LoginPage() {
     setLoading(true)
     setMessage({ type: '', text: '' })
 
+    const supabase = getSupabase()
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
     if (activeTab === 'signup') {
       if (password !== confirmPassword) {
         setMessage({ type: 'error', text: 'Passwords do not match.' })
         setLoading(false)
         return
       }
-      const { error } = await getSupabase().auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({ email, password })
       if (error) {
         setMessage({ type: 'error', text: error.message })
       } else {
@@ -50,7 +57,7 @@ export default function LoginPage() {
         setConfirmPassword('')
       }
     } else {
-      const { error } = await getSupabase().auth.signInWithPassword({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         setMessage({ type: 'error', text: error.message })
       } else {
