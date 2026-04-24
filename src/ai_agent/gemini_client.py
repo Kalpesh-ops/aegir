@@ -13,6 +13,7 @@ from google.generativeai.types import helper_types
 from src.database.supabase_client import get_global_cached_report, store_global_cached_report
 from src.utils.data_sanitizer import redact_report_text
 from src.utils.secrets import decrypt_str, encrypt_str
+from src.utils.sqlite_helpers import connect as sqlite_connect
 
 # Handle prompt import safely
 try:
@@ -47,7 +48,7 @@ class GeminiAgent:
     def _init_cache(self):
         """Initializes the local SQLite cache for AI reports and settings."""
         CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(CACHE_DB)
+        conn = sqlite_connect(CACHE_DB)
         
         # Existing reports table
         conn.execute("""
@@ -78,7 +79,7 @@ class GeminiAgent:
         through to the env var so the app can still run with a fresh key.
         """
         try:
-            conn = sqlite3.connect(CACHE_DB)
+            conn = sqlite_connect(CACHE_DB)
             cursor = conn.cursor()
             cursor.execute("SELECT config_value FROM settings WHERE config_key = 'google_api_key'")
             row = cursor.fetchone()
@@ -115,7 +116,7 @@ class GeminiAgent:
 
         try:
             encrypted = encrypt_str(api_key)
-            conn = sqlite3.connect(CACHE_DB)
+            conn = sqlite_connect(CACHE_DB)
             conn.execute(
                 "INSERT OR REPLACE INTO settings (config_key, config_value) VALUES (?, ?)",
                 ("google_api_key", encrypted),
@@ -184,7 +185,7 @@ class GeminiAgent:
     def _get_cached_report(self, signature: str) -> str:
         """Retrieves a report from the local cache."""
         try:
-            conn = sqlite3.connect(CACHE_DB)
+            conn = sqlite_connect(CACHE_DB)
             cursor = conn.cursor()
             cursor.execute("SELECT report_text FROM ai_reports WHERE signature = ?", (signature,))
             row = cursor.fetchone()
@@ -197,7 +198,7 @@ class GeminiAgent:
     def _cache_report(self, signature: str, report_text: str):
         """Saves a generated report to the local cache."""
         try:
-            conn = sqlite3.connect(CACHE_DB)
+            conn = sqlite_connect(CACHE_DB)
             conn.execute(
                 "INSERT OR REPLACE INTO ai_reports (signature, report_text) VALUES (?, ?)",
                 (signature, report_text)

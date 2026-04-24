@@ -5,6 +5,8 @@ import requests
 import logging
 import socket
 
+from src.utils.sqlite_helpers import connect as sqlite_connect
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -21,15 +23,14 @@ CIRCL_URLS = [
 
 def _get_cache_conn() -> sqlite3.Connection:
     os.makedirs(CACHE_DIR, exist_ok=True)
-    conn = sqlite3.connect(CACHE_DB)
+    conn = sqlite_connect(CACHE_DB)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS cve_cache "
         "(vendor TEXT, product TEXT, result_json TEXT, cached_at TEXT, "
         "PRIMARY KEY (vendor, product))"
     )
     conn.commit()
-    conn.close()
-    return sqlite3.connect(CACHE_DB)
+    return conn
 
 
 class CIRCLClient:

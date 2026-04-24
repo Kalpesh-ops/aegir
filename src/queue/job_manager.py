@@ -5,6 +5,8 @@ import sqlite3
 import logging
 from datetime import datetime, timezone
 
+from src.utils.sqlite_helpers import connect as sqlite_connect
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -14,7 +16,7 @@ _JOBS_DB = os.path.join(os.path.dirname(__file__), "..", "..", "data", "jobs.db"
 
 def _get_conn() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(_JOBS_DB), exist_ok=True)
-    conn = sqlite3.connect(_JOBS_DB)
+    conn = sqlite_connect(_JOBS_DB)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS scan_jobs ("
         "job_id TEXT PRIMARY KEY,"
