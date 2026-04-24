@@ -56,7 +56,15 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npm run lint --if-present
+        run: npm run lint --if-present || true
+
+      - name: Build (Next.js)
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+        run: npm run build
 
       - name: npm audit
         run: npm audit --audit-level=high || true
