@@ -13,7 +13,7 @@ from src.scanner.scapy_engine import ScapyEngine
 from src.scanner.tshark_engine import TSharkScanner
 from src.vuln_lookup.circl_client import CIRCLClient
 from src.vuln_lookup.vuln_checker import VulnChecker
-from src.utils.data_sanitizer import redact_enriched_scan
+from src.utils.data_sanitizer import redact_enriched_scan, redact_target_for_storage
 from src.ai_agent.gemini_client import GeminiAgent
 from src.database.supabase_client import store_scan_result
 
@@ -231,7 +231,7 @@ def run_worker() -> None:
                     user_id = job_info.get("user_id", "anonymous") if job_info else "anonymous"
                     store_scan_result(
                         user_id=user_id,
-                        target_redacted=target,
+                        target_redacted=redact_target_for_storage(target),
                         ports=redacted["ports"],
                         cve_findings=redacted["cve_findings"],
                         ai_summary=ai_summary,

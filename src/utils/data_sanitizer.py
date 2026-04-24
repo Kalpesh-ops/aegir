@@ -32,7 +32,7 @@ def sanitize_scan_data(scan_data, target=None):
 
     # --- REGEX PATTERNS (Strict) ---
     mac_regex = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", re.IGNORECASE)
-    email_regex = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+    email_regex = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     password_regex = re.compile(
         r"(?i)(password|passwd|pwd)[:\s=]+[^\s,}]+", re.IGNORECASE
     )
@@ -181,7 +181,7 @@ def redact_report_text(report_text: str) -> str:
         return report_text
 
     mac_regex = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", re.IGNORECASE)
-    email_regex = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+    email_regex = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     ipv4_regex = re.compile(
         r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
     )
@@ -194,3 +194,46 @@ def redact_report_text(report_text: str) -> str:
     out = password_regex.sub(r"\1 [REDACTED]", out)
     out = credential_regex.sub(r"\1 [REDACTED]", out)
     return out
+
+
+def redact_target_for_storage(target: str) -> str:
+    """
+    Return a display-safe rendering of ``target`` for the ``scans`` table.
+
+    The column was previously called ``target_redacted`` but stored the raw
+    value — a misleading name that looked like a privacy guarantee it didn't
+    provide (M-11). This helper masks the final octet of private IPv4s and
+    collapses hostnames to their eTLD+1 so a shared screenshot of scan
+    history does not reveal the exact host scanned.
+    """
+    if not target:
+        return target
+    candidate = target.strip()
+    if not candidate:
+        return candidate
+
+    # Loopback and "localhost" are already as uninformative as they get.
+    if candidate.lower() in {"localhost", "::1"}:
+        return candidate
+
+    ipv4 = re.fullmatch(
+        r"(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)",
+        candidate,
+    )
+    if ipv4:
+        parts = candidate.split(".")
+        return ".".join(parts[:3] + ["XXX"])
+
+    cidr = re.fullmatch(
+        r"((?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d))/(\d{1,2})",
+        candidate,
+    )
+    if cidr:
+        parts = cidr.group(1).split(".")
+        return ".".join(parts[:3] + ["XXX"]) + f"/{cidr.group(2)}"
+
+    # For hostnames keep only the registrable-looking trailing components.
+    labels = candidate.split(".")
+    if len(labels) >= 2:
+        return "***." + ".".join(labels[-2:])
+    return "***"
