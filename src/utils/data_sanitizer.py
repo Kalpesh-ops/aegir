@@ -164,3 +164,33 @@ def redact_enriched_scan(data: dict) -> dict:
 
     walk(redacted)
     return redacted
+
+
+def redact_report_text(report_text: str) -> str:
+    """
+    Second-pass redactor for AI-generated prose that is about to be written to
+    the cross-tenant global cache (M-1). The model sometimes quotes back IPs,
+    hostnames, emails, MAC addresses or credentials that appeared in the scan;
+    those must not leak across users who hit the same cache signature.
+
+    The input is assumed to already have been through :func:`sanitize_scan_data`
+    on the way *in*; this function handles the symmetric problem on the way
+    *out*.
+    """
+    if not isinstance(report_text, str) or not report_text:
+        return report_text
+
+    mac_regex = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", re.IGNORECASE)
+    email_regex = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+    ipv4_regex = re.compile(
+        r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b"
+    )
+    password_regex = re.compile(r"(?i)(password|passwd|pwd)[:\s=]+\S+")
+    credential_regex = re.compile(r"(?i)(username|user|login)[:\s=]+\S+")
+
+    out = mac_regex.sub("[REDACTED_MAC]", report_text)
+    out = email_regex.sub("[REDACTED_EMAIL]", out)
+    out = ipv4_regex.sub("[REDACTED_IP]", out)
+    out = password_regex.sub(r"\1 [REDACTED]", out)
+    out = credential_regex.sub(r"\1 [REDACTED]", out)
+    return out

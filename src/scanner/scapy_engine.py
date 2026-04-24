@@ -51,9 +51,14 @@ class ScapyEngine:
             
             return result
 
+        except PermissionError as e:
+            # Raw sockets require CAP_NET_RAW/admin. Surfacing a specific
+            # error keeps the worker's Nmap-inference fallback in play (H-3).
+            logging.warning(f"Scapy needs admin privileges: {e}")
+            return {"error": "admin_required"}
         except Exception as e:
             logging.error(f"Scapy scan failed: {e}")
-            return {"error": str(e)}
+            return {"error": "scapy_failure"}
 
 # --- TEST BLOCK ---
 if __name__ == "__main__":

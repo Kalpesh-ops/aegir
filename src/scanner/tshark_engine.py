@@ -22,44 +22,65 @@ class TSharkScanner:
             os.makedirs(self.output_dir)
             logging.info(f"Created capture directory: {self.output_dir}")
 
-    @staticmethod
-    def detect_interface(target_ip: str) -> str:
+    _IFACE_ALLOW_RE = re.compile(r"^[A-Za-z0-9_.:\- ]{1,32}$")
+
+    @classmethod
+    def _is_safe_iface(cls, name: str) -> bool:
+        """
+        Allow-list filter for interface names. Prevents argv injection when the
+        name is forwarded into the ``tshark -i`` argument. The pattern is
+        deliberately permissive enough for Windows friendly names (e.g.
+        ``Wi-Fi``, ``Local Area Connection*1``) while still refusing shell
+        metacharacters (M-4).
+        """
+        return bool(name) and bool(cls._IFACE_ALLOW_RE.match(name))
+
+    @classmethod
+    def detect_interface(cls, target_ip: str) -> str:
         """
         Auto-detect the correct TShark interface for a given target IP.
-        Falls back to TSHARK_INTERFACE env var, then index '1'.
+
+        Resolution order:
+            1. ``TSHARK_INTERFACE`` env var (allow-listed)
+            2. psutil scan for an adapter in the same /24 as the target
+            3. Platform-appropriate sane default (``Ethernet`` on Windows,
+               ``any`` on Linux/macOS where ``tshark`` supports it)
         """
-        import subprocess, os, ipaddress
+        import ipaddress
 
         env_iface = os.getenv("TSHARK_INTERFACE")
-        if env_iface:
+        if env_iface and cls._is_safe_iface(env_iface):
             return env_iface
 
         try:
+            import psutil  # type: ignore
+
             target = ipaddress.ip_address(target_ip)
-            result = subprocess.run(
-                ["ipconfig"], capture_output=True, text=True, timeout=5
-            )
-            current_iface = None
-            for line in result.stdout.splitlines():
-                line = line.strip()
-                if "adapter" in line.lower():
-                    current_iface = line
-                if "IPv4" in line and current_iface:
-                    ip_part = line.split(":")[-1].strip()
+            addrs = psutil.net_if_addrs()
+            for iface_name, iface_addrs in addrs.items():
+                if not cls._is_safe_iface(iface_name):
+                    continue
+                for addr in iface_addrs:
+                    if getattr(addr, "family", None) is None:
+                        continue
+                    if not str(addr.address).count(".") == 3:
+                        continue
                     try:
-                        iface_ip = ipaddress.ip_address(ip_part)
-                        # Check if target is in same /24
-                        if list(target.packed[:3]) == list(iface_ip.packed[:3]):
-                            # Extract adapter name from "Ethernet adapter Ethernet:"
-                            name = current_iface.split("adapter")[-1].strip().rstrip(":")
-                            logging.info(f"[TShark] Auto-detected interface: {name}")
-                            return name
+                        iface_ip = ipaddress.ip_address(addr.address)
                     except ValueError:
                         continue
+                    if list(target.packed[:3]) == list(iface_ip.packed[:3]):
+                        logging.info(f"[TShark] Auto-detected interface: {iface_name}")
+                        return iface_name
         except Exception as e:
             logging.warning(f"[TShark] Interface detection failed: {e}")
 
-        return "Ethernet"  # sane Windows default
+        # Platform defaults. Windows shows "Ethernet" by default in the
+        # wireshark capture list; on Linux/macOS, ``any`` captures all
+        # interfaces and is supported by recent tshark versions.
+        import platform
+
+        return "Ethernet" if platform.system() == "Windows" else "any"
     
     def run_capture(self, target_ip, duration=30, interface=None):
         """
@@ -75,7 +96,13 @@ class TSharkScanner:
         """
         if interface is None:
             interface = self.detect_interface(target_ip)
-            
+
+        if not self._is_safe_iface(interface):
+            return {
+                "status": "error",
+                "error": "Interface name rejected by allow-list",
+            }
+
         try:
             timestamp = time.strftime("%Y%m%d-%H%M%S")
             pcap_filename = f"capture_{timestamp}.pcap"

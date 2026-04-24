@@ -1,19 +1,26 @@
+"""
+NetSec AI Scanner — FastAPI backend.
+
+Designed to run **locally** alongside the frontend (Electron / desktop exe).
+The HTTP listener binds to ``127.0.0.1`` by default and ``TrustedHostMiddleware``
+blocks non-loopback ``Host`` headers so DNS-rebinding attacks cannot pivot
+through it from a browser tab the user happens to have open.
+"""
+
 import sys
 import os
-import re
-import ipaddress
 import threading
 import time
+import uuid
 from enum import Enum
 from collections import defaultdict
+
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from src.queue.job_manager import clear_user_jobs
 
 import logging
 
@@ -24,82 +31,152 @@ from src.scanner.scapy_engine import ScapyEngine
 from src.scanner.tshark_engine import TSharkScanner
 from src.ai_agent.gemini_client import GeminiAgent
 from src.vuln_lookup.circl_client import CIRCLClient
-from src.utils.data_sanitizer import sanitize_scan_data
+from src.utils.data_sanitizer import sanitize_scan_data  # noqa: F401  (public API)
 from src.utils.token_optimizer import prune_scan_data
+from src.utils.log_scrubber import install_scrubber
+from src.utils.validators import TargetValidationError, validate_target
 from src.queue.job_manager import clear_user_jobs, create_job, get_job_status
 from src.auth.middleware import get_current_user
-from src.database.supabase_client import get_user_scans
-from src.database.consent_manager import has_valid_consent, save_consent, revoke_consent
-
-# --- Simple in-memory rate limiters ---
-_scan_rate_lock = threading.Lock()
-_scan_rate: dict[str, list[float]] = defaultdict(list)
-
-
-def _check_rate_limit(key: str, max_calls: int, window_seconds: float) -> bool:
-    """Return True if the request is within the rate limit, False if exceeded."""
-    now = time.time()
-    with _scan_rate_lock:
-        _scan_rate[key] = [t for t in _scan_rate[key] if now - t < window_seconds]
-        if len(_scan_rate[key]) >= max_calls:
-            return False
-        _scan_rate[key].append(now)
-        return True
+from src.database.supabase_client import (
+    delete_user_account_data,
+    delete_user_scans as supabase_delete_user_scans,
+    get_user_scans,
+)
+from src.database.consent_manager import has_valid_consent, revoke_consent, save_consent
 
 
-# Configure logging
+# --- Logging ----------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+install_scrubber()
 
+# --- Rate limiting (local-first, in-memory sliding window) ------------------
+# For a single-user Electron deployment we are not defending against
+# distributed abuse — these limits mainly catch accidental loops (e.g. a buggy
+# UI poll) and protect the Gemini quota. Authenticated routes are keyed by
+# ``user_id``; unauthenticated ones by ``client.host`` (with the caveat that
+# behind a reverse proxy every user shares a bucket, which is an acceptable
+# trade-off here).
+_rate_lock = threading.Lock()
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(key: str, max_calls: int, window_seconds: float) -> bool:
+    now = time.time()
+    with _rate_lock:
+        _rate_buckets[key] = [t for t in _rate_buckets[key] if now - t < window_seconds]
+        if len(_rate_buckets[key]) >= max_calls:
+            return False
+        _rate_buckets[key].append(now)
+        return True
+
+
+# --- App + middleware -------------------------------------------------------
 app = FastAPI(title="NetSec AI Kernel")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Attach a restrictive set of response headers.
+
+    The CSP is safe for the API response shape (JSON / plain text) and for the
+    swagger UI served by FastAPI at ``/docs``. The Electron renderer sets its
+    own, stricter CSP at the document level — these headers are defence-in-
+    depth when the backend is reached via a browser tab directly.
+    """
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), interest-cohort=()"
         )
+        response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'"
+        )
+        # Only emit HSTS when served over HTTPS; on 127.0.0.1 it's pointless
+        # and confuses some browsers into pinning a loopback hostname.
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
         return response
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://netsec-ai-scanner.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["*"],
-)
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Attach a per-request UUID for correlation between server logs and 500s."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+# CORS: default to the Electron renderer's origin (``app://`` or ``file://``)
+# plus localhost dev servers. Extra allowed origins may be appended via the
+# ``EXTRA_CORS_ORIGINS`` env var (comma-separated) for e.g. a hosted staging
+# deploy.
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "https://netsec-ai-scanner.vercel.app",
+]
+extra_origins = [
+    o.strip()
+    for o in os.getenv("EXTRA_CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
+CORS_ORIGINS = DEFAULT_CORS_ORIGINS + extra_origins
 
 app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=ALLOWED_HOSTS,
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if h.strip()
+]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logging.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    rid = getattr(request.state, "request_id", "-")
+    logging.error(
+        f"Unhandled exception on {request.method} {request.url.path} (rid={rid}): {exc}"
+    )
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
             "detail": "An unexpected error occurred.",
+            "request_id": rid,
         },
     )
 
 
-# Initialize engines
+# --- Engines (lazy singletons) ----------------------------------------------
 nmap_engine = NmapScanner()
 scapy_engine = ScapyEngine()
 tshark_engine = TSharkScanner()
@@ -108,87 +185,33 @@ circl_client = CIRCLClient()
 logging.info(f"CIRCL API reachable: {circl_client.test_connection()}")
 
 
-# --- ENUMS ---
 class ScanMode(str, Enum):
     fast = "fast"
     deep = "deep"
     pen_test = "pen_test"
 
 
-# --- SCAN PROFILES ---
 SCAN_PROFILES = {
     "fast": {
         "label": "Fast Scan",
-        "estimated_seconds": {
-            "nmap": 30,
-            "scapy": 0,
-            "tshark": 0,
-            "ai": 8,
-            "total": 38,
-        },
+        "estimated_seconds": {"nmap": 30, "scapy": 0, "tshark": 0, "ai": 8, "total": 38},
     },
     "deep": {
         "label": "Deep Scan",
-        "estimated_seconds": {
-            "nmap": 90,
-            "scapy": 3,
-            "tshark": 0,
-            "ai": 12,
-            "total": 105,
-        },
+        "estimated_seconds": {"nmap": 90, "scapy": 3, "tshark": 0, "ai": 12, "total": 105},
     },
     "pen_test": {
         "label": "Pen Testing Scan",
-        "estimated_seconds": {
-            "nmap": 180,
-            "scapy": 5,
-            "tshark": 25,
-            "ai": 15,
-            "total": 225,
-        },
+        "estimated_seconds": {"nmap": 180, "scapy": 5, "tshark": 25, "ai": 15, "total": 225},
     },
 }
 
 
-# --- SECURITY: INPUT VALIDATION ---
-def validate_target(target: str):
-    ipv4_regex = r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-    domain_regex = r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
-    cidr_regex = r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(?:3[0-2]|[12]?[0-9])$"
-
-    if target == "localhost":
-        return True
-
-    if re.match(cidr_regex, target):
-        net = ipaddress.ip_network(target, strict=False)
-        if not net.is_private and not net.is_loopback:
-            raise ValueError(
-                "Public IP ranges are not permitted. Only private or loopback ranges allowed."
-            )
-        if net.prefixlen > 24:
-            raise ValueError(
-                "CIDR prefix must be /24 or smaller (more specific networks not allowed)."
-            )
-        return True
-
-    if re.match(ipv4_regex, target):
-        addr = ipaddress.ip_address(target)
-        if not addr.is_private and not addr.is_loopback and not addr.is_reserved:
-            raise ValueError(
-                "Public IPs are not permitted. Only private or loopback addresses allowed."
-            )
-        return True
-
-    if re.match(domain_regex, target):
-        return True
-
-    raise ValueError("Invalid Target Format. Detection of potential injection attack.")
-
-
+# --- Request models ---------------------------------------------------------
 class ScanRequest(BaseModel):
     target: str
     scan_mode: ScanMode = ScanMode.fast
-    use_xml: bool = False  # Use XML-based scanning (more reliable in some environments)
+    use_xml: bool = False
 
 
 class ScanQueueRequest(BaseModel):
@@ -197,272 +220,53 @@ class ScanQueueRequest(BaseModel):
     scan_type: ScanMode | None = None
 
 
-# --- FIREWALL ANALYSIS HELPERS ---
+class ConsentRequest(BaseModel):
+    app_version: str = "1.0"
 
 
-def infer_firewall_from_nmap(scan_data: dict, target: str) -> dict:
-    """
-    Fallback firewall detection using Nmap port state analysis.
-
-    Logic:
-    - If ANY port is 'filtered' -> Stateful firewall detected
-    - If ports are 'closed' but host is up -> Likely unfiltered/stateless
-    - If ALL ports are 'open' -> Very permissive firewall
-    - Mixed states -> Complex firewall rules
-
-    Args:
-        scan_data: Raw Nmap scan result dict
-        target: Target IP for reference
-
-    Returns:
-        dict with firewall_status, explanation, and inference_method
-    """
-    try:
-        hosts = scan_data.get("hosts", [])
-        if not hosts:
-            return {
-                "target": target,
-                "port": "N/A",
-                "response_type": "No Host Data",
-                "firewall_status": "Unknown",
-                "explanation": "No host data available from Nmap scan.",
-                "inference_method": "nmap_fallback",
-                "confidence": "low",
-            }
-
-        host_data = hosts[0]
-        open_ports = host_data.get("open_ports", [])
-
-        if not open_ports:
-            return {
-                "target": target,
-                "port": "N/A",
-                "response_type": "No Open Ports",
-                "firewall_status": "Highly Restrictive / Firewall Active",
-                "explanation": "No open ports detected. Target is either offline or protected by an aggressive firewall.",
-                "inference_method": "nmap_fallback",
-                "confidence": "high",
-            }
-
-        # Analyze port states
-        port_states = {}
-        for port in open_ports:
-            state = (
-                port.get("state", "unknown") if isinstance(port, dict) else "unknown"
-            )
-            port_states[state] = port_states.get(state, 0) + 1
-
-        total_ports = len(open_ports)
-        if total_ports == 0:
-            # Safety check - shouldn't reach here due to earlier check, but just in case
-            return {
-                "target": target,
-                "port": "N/A",
-                "response_type": "No Data",
-                "firewall_status": "Unable to Determine",
-                "explanation": "No port data available for analysis.",
-                "inference_method": "nmap_fallback",
-                "confidence": "low",
-            }
-
-        filtered_count = port_states.get("filtered", 0)
-        open_count = port_states.get("open", 0)
-        closed_count = port_states.get("closed", 0)
-
-        logging.info(f"[Firewall Inference] Port states: {port_states}")
-
-        # --- INFERENCE RULES ---
-
-        # Rule 1: High percentage of filtered ports = Stateful Firewall
-        if filtered_count > 0 and (filtered_count / len(open_ports)) >= 0.5:
-            return {
-                "target": target,
-                "port": "multiple",
-                "response_type": "Mixed (Filtered Majority)",
-                "firewall_status": "Stateful / Filtered (Inferred via Nmap)",
-                "explanation": f"Nmap detected {filtered_count}/{len(open_ports)} ports as filtered. This indicates a stateful firewall is active, blocking unsolicited packets.",
-                "inference_method": "nmap_fallback",
-                "confidence": "high",
-                "port_breakdown": port_states,
-            }
-
-        # Rule 2: Mostly open ports with some filtered = Complex Rules
-        if open_count > 0 and filtered_count > 0:
-            return {
-                "target": target,
-                "port": "multiple",
-                "response_type": "Mixed (Open + Filtered)",
-                "firewall_status": "Stateful with Selective Rules (Inferred via Nmap)",
-                "explanation": f"Nmap detected {open_count} open and {filtered_count} filtered ports. The firewall has selective rules allowing some services.",
-                "inference_method": "nmap_fallback",
-                "confidence": "medium",
-                "port_breakdown": port_states,
-            }
-
-        # Rule 3: All or mostly open = Permissive Firewall
-        if open_count >= (len(open_ports) - 1):
-            return {
-                "target": target,
-                "port": "multiple",
-                "response_type": "All Open",
-                "firewall_status": "Permissive / Unfiltered (Inferred via Nmap)",
-                "explanation": f"Nmap detected {open_count}/{len(open_ports)} ports as open with minimal filtering. Firewall is permissive or absent.",
-                "inference_method": "nmap_fallback",
-                "confidence": "high",
-                "port_breakdown": port_states,
-            }
-
-        # Rule 4: Mix of closed and filtered = Moderate Security
-        if closed_count > 0 and filtered_count > 0:
-            return {
-                "target": target,
-                "port": "multiple",
-                "response_type": "Mixed (Closed + Filtered)",
-                "firewall_status": "Moderate Firewall (Stateless Likely)",
-                "explanation": f"Nmap detected closed and filtered ports. Firewall likely responds differently to various probes.",
-                "inference_method": "nmap_fallback",
-                "confidence": "medium",
-                "port_breakdown": port_states,
-            }
-
-        # Rule 5: Mostly closed ports = Stateless/Unfiltered
-        if closed_count >= (len(open_ports) - 1):
-            return {
-                "target": target,
-                "port": "multiple",
-                "response_type": "Mostly Closed",
-                "firewall_status": "Stateless / Unfiltered (Inferred via Nmap)",
-                "explanation": "Most ports are closed (host responds), suggesting a stateless firewall or host-level filtering.",
-                "inference_method": "nmap_fallback",
-                "confidence": "medium",
-                "port_breakdown": port_states,
-            }
-
-        # Default fallback
-        return {
-            "target": target,
-            "port": "multiple",
-            "response_type": "Indeterminate",
-            "firewall_status": "Unknown Firewall State (Inferred via Nmap)",
-            "explanation": "Nmap detected mixed port states. Firewall configuration is complex or indeterminate.",
-            "inference_method": "nmap_fallback",
-            "confidence": "low",
-            "port_breakdown": port_states,
-        }
-
-    except Exception as e:
-        logging.error(f"Nmap firewall inference failed: {e}")
-        return {
-            "target": target,
-            "port": "N/A",
-            "response_type": "Inference Error",
-            "firewall_status": "Unable to Determine",
-            "explanation": f"Firewall inference failed: {str(e)}",
-            "inference_method": "nmap_fallback",
-            "confidence": "low",
-        }
+class AnalyzeRequest(BaseModel):
+    open_ports: list = []
+    cve_findings: list = []
 
 
-def analyze_firewall(scan_data: dict, target: str, scan_mode: str) -> dict:
-    """
-    Primary firewall analysis with graceful fallback.
-
-    Strategy:
-    1. Try Scapy direct probe (requires admin/root)
-    2. Fall back to Nmap inference if Scapy fails
-
-    Args:
-        scan_data: Raw Nmap result
-        target: Target IP
-        scan_mode: Scan mode (determines whether to attempt Scapy)
-
-    Returns:
-        dict with firewall analysis (from Scapy or Nmap inference)
-    """
-    # Only attempt Scapy on deep/pen_test modes
-    if scan_mode not in ["deep", "pen_test"]:
-        return {
-            "status": "skipped",
-            "reason": f"Firewall analysis not enabled for {scan_mode} mode",
-        }
-
-    logging.info(f"[Firewall Analysis] Attempting Scapy probe on {target}...")
-
-    try:
-        # Determine target port based on scan mode
-        firewall_port = 445 if scan_mode == "pen_test" else 80
-
-        # Attempt direct probe with Scapy
-        fw_status = scapy_engine.firewall_detect(target, port=firewall_port)
-
-        # Check if Scapy encountered an error
-        if "error" in fw_status:
-            raise PermissionError(fw_status["error"])
-
-        logging.info(
-            f"[Firewall Analysis] Scapy probe successful: {fw_status['firewall_status']}"
-        )
-        fw_status["inference_method"] = "scapy_direct"
-        return fw_status
-
-    except PermissionError as pe:
-        logging.warning(f"[Firewall Analysis] Scapy requires elevated privileges: {pe}")
-        logging.info(f"[Firewall Analysis] Falling back to Nmap-based inference...")
-
-        # Use Nmap inference as fallback
-        return infer_firewall_from_nmap(scan_data, target)
-
-    except Exception as e:
-        logging.warning(
-            f"[Firewall Analysis] Scapy probe failed ({type(e).__name__}): {e}"
-        )
-        logging.info(f"[Firewall Analysis] Falling back to Nmap-based inference...")
-
-        # Use Nmap inference as fallback
-        return infer_firewall_from_nmap(scan_data, target)
+class APIKeyRequest(BaseModel):
+    api_key: str
 
 
+# --- Routes -----------------------------------------------------------------
 @app.post("/api/scan")
 async def run_scan(
-    request: Request, body: ScanQueueRequest, user_id: str = Depends(get_current_user)
+    request: Request,
+    body: ScanQueueRequest,
+    user_id: str = Depends(get_current_user),
 ):
-    """
-    Queue a network scan job for async processing by the background worker.
-
-    Args:
-        request: ScanQueueRequest with target.
-
-    Returns:
-        {"scan_id": job_id, "status": "queued", "message": "..."}
-    """
-    client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate_limit(f"scan:{client_ip}", max_calls=5, window_seconds=3600):
+    """Queue a scan job for async processing by the background worker."""
+    if not _check_rate_limit(f"scan:{user_id}", max_calls=5, window_seconds=3600):
         return JSONResponse(
             status_code=429,
             content={"error": "Rate limit exceeded", "detail": "Too many requests"},
         )
     try:
         validate_target(body.target)
-        requested_mode = body.scan_mode
-        # Backward compatibility for older frontend bundles still sending scan_type.
-        if "scan_mode" not in body.model_fields_set and body.scan_type is not None:
-            requested_mode = body.scan_type
-
-        job_id = create_job(user_id, body.target, requested_mode.value)
-        logging.info(
-            f"[*] Scan queued: job={job_id} target={body.target} mode={requested_mode.value}"
-        )
-        return {
-            "scan_id": job_id,
-            "status": "queued",
-            "message": "Scan queued successfully",
-        }
-    except ValueError as ve:
-        logging.error(f"[!] Validation error: {ve}")
+    except TargetValidationError as ve:
+        logging.info(f"[!] Target validation rejection: {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        logging.error(f"[!] Queue error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        rid = getattr(request.state, "request_id", "-")
+        logging.error(f"[!] Unexpected validation error (rid={rid}): {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
+
+    try:
+        requested_mode = body.scan_mode
+        if "scan_mode" not in body.model_fields_set and body.scan_type is not None:
+            requested_mode = body.scan_type
+        job_id = create_job(user_id, body.target, requested_mode.value)
+        logging.info(f"[*] Scan queued: job={job_id} mode={requested_mode.value}")
+        return {"scan_id": job_id, "status": "queued", "message": "Scan queued successfully"}
+    except Exception as e:
+        rid = getattr(request.state, "request_id", "-")
+        logging.error(f"[!] Queue error (rid={rid}): {e}")
+        raise HTTPException(status_code=500, detail="Failed to queue scan")
 
 
 @app.get("/api/scan/{scan_id}")
@@ -470,8 +274,7 @@ async def get_scan_status(
     request: Request, scan_id: str, user_id: str = Depends(get_current_user)
 ):
     """Retrieve the status and result of a queued scan job."""
-    client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate_limit(f"status:{client_ip}", max_calls=60, window_seconds=60):
+    if not _check_rate_limit(f"status:{user_id}", max_calls=120, window_seconds=60):
         return JSONResponse(
             status_code=429,
             content={"error": "Rate limit exceeded", "detail": "Too many requests"},
@@ -489,91 +292,131 @@ async def list_user_scans(user_id: str = Depends(get_current_user)):
     """Return the last 10 scans for the authenticated user."""
     return get_user_scans(user_id)
 
+
 @app.delete("/api/scans")
-async def delete_user_scans(user_id: str = Depends(get_current_user)):
-    """Clear all local scan history for the authenticated user."""
+async def delete_user_scans_route(user_id: str = Depends(get_current_user)):
+    """
+    Clear scan history for the authenticated user, locally **and** in Supabase.
+    Previously this only cleared the local SQLite queue (M-5).
+    """
+    deleted_supabase = 0
+    try:
+        deleted_supabase = supabase_delete_user_scans(user_id)
+    except Exception as e:
+        logging.error(f"[!] Supabase delete error: {e}")
     try:
         clear_user_jobs(user_id)
-        return {"status": "success", "message": "Local history cleared"}
     except Exception as e:
-        logging.error(f"[!] Delete history error: {e}")
+        logging.error(f"[!] Local delete error: {e}")
         raise HTTPException(status_code=500, detail="Failed to clear local history")
 
-class ConsentRequest(BaseModel):
-    app_version: str = "1.0"
+    return {
+        "status": "success",
+        "message": "Scan history cleared",
+        "deleted_supabase_rows": deleted_supabase,
+    }
+
+
+@app.delete("/api/account")
+async def delete_account(user_id: str = Depends(get_current_user)):
+    """GDPR-style erasure: purge every row owned by the current user."""
+    try:
+        summary = delete_user_account_data(user_id)
+        clear_user_jobs(user_id)
+        return {"status": "success", **summary}
+    except Exception as e:
+        logging.error(f"[!] Account deletion error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete account data")
+
 
 @app.get("/api/consent")
 async def check_consent(user_id: str = Depends(get_current_user)):
-    """Check if user has valid consent for advanced scan modes."""
     return {"has_consent": has_valid_consent(user_id)}
+
 
 @app.post("/api/consent")
 async def grant_consent(
     request: Request,
     body: ConsentRequest,
-    user_id: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user),
 ):
-    """Record explicit user consent for advanced scan modes."""
     client_ip = request.client.host if request.client else "unknown"
     save_consent(user_id, client_ip, body.app_version)
     return {"success": True}
 
+
 @app.delete("/api/consent")
 async def revoke_user_consent(user_id: str = Depends(get_current_user)):
-    """Revoke user consent — blocks access to advanced modes."""
     revoke_consent(user_id)
     return {"success": True}
 
+
 @app.post("/api/analyze")
-async def analyze_scan(request: Request, data: dict):
-    """AI threat analysis endpoint."""
-    client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate_limit(f"analyze:{client_ip}", max_calls=10, window_seconds=60):
+async def analyze_scan(
+    request: Request,
+    body: AnalyzeRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    On-demand AI analysis over an already-collected port/CVE profile.
+
+    Authenticated (C-2) and per-user rate-limited so the shared Gemini key
+    cannot be exhausted by anonymous callers.
+    """
+    if not _check_rate_limit(f"analyze:{user_id}", max_calls=10, window_seconds=60):
         return JSONResponse(
             status_code=429,
             content={"error": "Rate limit exceeded", "detail": "Too many requests"},
         )
     try:
-        logging.info(f"[*] Received analysis request")
-        if not isinstance(data, dict):
-            raise HTTPException(status_code=400, detail="Invalid request body")
-        optimized_data = prune_scan_data(data)
+        logging.info("[*] Received analysis request")
+        optimized_data = prune_scan_data(
+            {"open_ports": body.open_ports, "cve_findings": body.cve_findings}
+        )
         ports = optimized_data.get("open_ports", [])
         cve_findings = optimized_data.get("cve_findings", [])
-        if not isinstance(ports, list) or not isinstance(cve_findings, list):
-            raise HTTPException(status_code=400, detail="Invalid data format")
-        logging.info(f"[*] Sending optimized data to Gemini...")
+        logging.info("[*] Sending optimized data to Gemini...")
         report = ai_agent.analyze_scan(ports, cve_findings)
-        logging.info(f"[✓] AI analysis complete")
+        logging.info("[✓] AI analysis complete")
         return {"report": report}
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"[!] Analysis error: {e}")
+        rid = getattr(request.state, "request_id", "-")
+        logging.error(f"[!] Analysis error (rid={rid}): {e}")
         raise HTTPException(status_code=500, detail="Analysis failed")
 
 
-class APIKeyRequest(BaseModel):
-    api_key: str
-
 @app.post("/api/settings/apikey")
-async def update_api_key(request: APIKeyRequest):
-    """Save user's Gemini API key to local SQLite DB."""
-    success = ai_agent.save_user_api_key(request.api_key)
+async def update_api_key(
+    request: Request,
+    body: APIKeyRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    Save the BYOK Gemini key. Authenticated (C-1), rate-limited, and stored
+    encrypted at rest via :mod:`src.utils.secrets`.
+    """
+    if not _check_rate_limit(f"apikey:{user_id}", max_calls=5, window_seconds=60):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded", "detail": "Too many requests"},
+        )
+    success = ai_agent.save_user_api_key(body.api_key)
     if success:
         return {"status": "success", "message": "API Key saved securely."}
-    return {"status": "error", "message": "Failed to save API Key."}
+    return JSONResponse(
+        status_code=400,
+        content={"status": "error", "message": "Failed to save API Key."},
+    )
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "backend": "online", "version": "2.0"}
+    return {"status": "healthy", "backend": "online", "version": "2.1"}
 
 
 if __name__ == "__main__":
-    import sys
-    import os
     import uvicorn
     from src.queue.worker import run_worker
 
@@ -583,5 +426,11 @@ if __name__ == "__main__":
         sys.stderr = log_file
 
     threading.Thread(target=run_worker, daemon=True).start()
-    logging.info("[*] Starting NetSec AI Kernel on http://127.0.0.1:8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
+
+    # Bind strictly to loopback. For advanced deployments an operator can set
+    # ``NETSEC_BIND_HOST`` explicitly — but ``0.0.0.0`` should never be the
+    # default for a local-first app (H-5).
+    bind_host = os.getenv("NETSEC_BIND_HOST", "127.0.0.1")
+    bind_port = int(os.getenv("NETSEC_BIND_PORT", "8000"))
+    logging.info(f"[*] Starting NetSec AI Kernel on http://{bind_host}:{bind_port}")
+    uvicorn.run(app, host=bind_host, port=bind_port, reload=False)

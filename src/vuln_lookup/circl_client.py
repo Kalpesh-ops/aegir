@@ -35,6 +35,11 @@ def _get_cache_conn() -> sqlite3.Connection:
 class CIRCLClient:
     def __init__(self):
         self.api_base = self._resolve_api_base()
+        # Flipped to True whenever a lookup fails. Callers can inspect this
+        # after ``enrich_services`` to surface a warning in the scan result
+        # (M-3: "cve enrichment was degraded" instead of silent 0 CVEs).
+        self.degraded: bool = False
+        self.last_error: str | None = None
 
     def _resolve_api_base(self) -> str:
         """Resolve API base URL with DNS fallback."""
@@ -93,18 +98,25 @@ class CIRCLClient:
                 break
             except requests.Timeout:
                 logging.warning(f"[CVE] Timeout for {vendor}/{product} at {base_url}")
+                self.degraded = True
+                self.last_error = "timeout"
                 continue
             except Exception as e:
                 logging.warning(f"[CVE] Request failed for {vendor}/{product}: {e}")
+                self.degraded = True
+                self.last_error = type(e).__name__
                 continue
         else:
             logging.warning(f"[CVE] All URLs failed for {vendor}/{product}")
+            self.degraded = True
             return []
 
         try:
             data = response.json()
         except Exception:
             logging.warning(f"[CVE] Failed to parse JSON for {vendor}/{product}")
+            self.degraded = True
+            self.last_error = "invalid_json"
             return []
 
         # ── Parse the CIRCL v2 response format ───────────────────────────────
