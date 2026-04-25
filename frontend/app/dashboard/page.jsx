@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardClient from '@/components/DashboardClient'
+import SetupBanner from '@/components/SetupBanner'
 import { scanCache } from '@/lib/localCache'
 
 export const dynamic = 'force-dynamic'
@@ -49,5 +50,12 @@ export default async function DashboardPage() {
     scanCache.set(user.id, 50, scans)
   }
 
-  return <DashboardClient scans={scans} />
+  return (
+    <>
+      <div className="px-6 pt-6 max-w-7xl mx-auto w-full">
+        <SetupBanner />
+      </div>
+      <DashboardClient scans={scans} />
+    </>
+  )
 }

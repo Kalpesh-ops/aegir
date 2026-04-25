@@ -43,6 +43,9 @@ from src.database.supabase_client import (
     get_user_scans,
 )
 from src.database.consent_manager import has_valid_consent, revoke_consent, save_consent
+from src.dependencies import detector as dep_detector
+from src.dependencies import installer as dep_installer
+from src.dependencies import registry as dep_registry
 
 
 # --- Logging ----------------------------------------------------------------
@@ -268,6 +271,14 @@ class APIKeyRequest(BaseModel):
     api_key: str
 
 
+class LicenseAcceptRequest(BaseModel):
+    dep_id: str
+
+
+class InstallRequest(BaseModel):
+    dep_id: str
+
+
 # --- Routes -----------------------------------------------------------------
 @app.post("/api/scan")
 async def run_scan(
@@ -444,6 +455,85 @@ async def update_api_key(
         status_code=400,
         content={"status": "error", "message": "Failed to save API Key."},
     )
+
+
+@app.get("/api/setup/detect")
+async def setup_detect(user_id: str = Depends(get_current_user)):
+    """List every native dependency the scanner can drive, with live install status.
+
+    The wizard polls this on render. Result is cached for a few seconds in
+    :mod:`src.dependencies.detector` so polling is cheap.
+    """
+    return {"dependencies": dep_detector.public_status()}
+
+
+@app.post("/api/setup/license")
+async def setup_accept_license(
+    body: LicenseAcceptRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """Persist the user's acknowledgement of an upstream license URL.
+
+    Required before ``/api/setup/install`` will queue a job for that dep.
+    """
+    spec = dep_registry.get_dependency(body.dep_id)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Unknown dependency.")
+    license_url = spec.get("license_url")
+    if not license_url:
+        # Nothing to accept; treat as a no-op success so the UI flow is uniform.
+        return {"status": "ok", "accepted": False}
+    dep_installer.record_license_acceptance(
+        body.dep_id, license_url, user_id=user_id
+    )
+    return {"status": "ok", "accepted": True}
+
+
+@app.post("/api/setup/install")
+async def setup_install(
+    request: Request,
+    body: InstallRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """Queue an upstream-installer download + execute job for one dep."""
+    if not _check_rate_limit(f"setup-install:{user_id}", max_calls=10, window_seconds=600):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded", "detail": "Too many install requests"},
+        )
+    try:
+        job = dep_installer.queue_install(body.dep_id, user_id=user_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"job": job.to_dict()}
+
+
+@app.get("/api/setup/install/{job_id}")
+async def setup_install_status(
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
+    job = dep_installer.status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Unknown install job.")
+    return {"job": job.to_dict()}
+
+
+@app.post("/api/setup/install/{job_id}/cancel")
+async def setup_install_cancel(
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
+    if not dep_installer.cancel(job_id):
+        raise HTTPException(status_code=404, detail="Job not cancellable.")
+    return {"status": "cancelling"}
+
+
+@app.get("/api/setup/jobs")
+async def setup_install_list(user_id: str = Depends(get_current_user)):
+    return {"jobs": dep_installer.all_statuses()}
 
 
 @app.get("/health")

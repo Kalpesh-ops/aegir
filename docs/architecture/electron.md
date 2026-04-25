@@ -153,9 +153,48 @@ four hours. The flow:
 Sentry or equivalent should be added in a future PR; the scaffold deliberately
 doesn't bake in a vendor choice yet.
 
+## Building a Windows installer end-to-end
+
+Three commands in order; each step's output feeds the next via the
+`extraResources` mappings declared in `electron-builder.yml`.
+
+```bash
+# 1. Backend → single-folder bundle at dist/netsec-backend/netsec-backend.exe
+pyinstaller netsec-backend.spec
+
+# 2. Frontend → Next standalone bundle at frontend/.next/standalone/
+cd frontend
+npm ci
+npm run build
+cd ..
+
+# 3. Electron installer → dist-electron/NetSec AI Scanner Setup-<ver>.exe
+npm ci
+npx electron-builder --win nsis
+```
+
+The PyInstaller spec is at `netsec-backend.spec` (committed). Hidden
+imports there cover uvicorn lifespan/protocols, scapy, google-generativeai,
+httpx (used by the dependency installer), and the `nmap` python package.
+
+> **Privileged install on Windows.** The NSIS installer marks the app as
+> `requestedExecutionLevel: requireAdministrator`. Scapy + TShark live
+> capture needs WinPcap raw-socket access which won't work without admin.
+> Trade-off: every renderer feature inherits admin rights for the lifetime
+> of the launch. The dependency-installer flow (`/dashboard/setup`) is the
+> beachhead for migrating to per-process elevation later — Nmap/TShark
+> sub-processes can be elevated individually via UAC at scan time, while
+> the Electron UI itself runs as a regular user.
+
+> **The `bundled_modules → node_modules` rename.** electron-builder 26 has a
+> long-running quirk where `node_modules` directories listed in
+> `extraResources` get partially stripped during signing on some platforms.
+> The Next standalone payload is shipped under the name `bundled_modules`
+> instead, and the supervisor renames it on first launch. See
+> `electron/frontend-supervisor.js` for the migration code.
+
 ## Known follow-up work (tracked separately)
 
-- [ ] PyInstaller build step producing a single-folder backend bundle.
 - [ ] Runtime injection of `NEXT_PUBLIC_API_URL` so the client bundle can talk
       to the dynamically-bound backend port. Currently the packaged Next
       server uses `rewrites()` + env at server-startup time; the client bundle
@@ -169,3 +208,5 @@ doesn't bake in a vendor choice yet.
 - [ ] macOS notarisation (requires an Apple Developer account).
 - [ ] Branded icons (`electron/build-resources/icon.{ico,icns,png}`).
 - [ ] Sentry / equivalent crash reporting.
+- [ ] Per-process UAC elevation for nmap/tshark sub-processes (replacing the
+      whole-app `requireAdministrator` model).
