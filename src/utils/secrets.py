@@ -5,10 +5,12 @@ The Fernet master key is stored in the user's OS config directory (rather than
 next to the encrypted data) so a single filesystem-read bug inside the
 repo/install tree does not hand the attacker both the ciphertext and the key.
 
-On Windows the key lives under ``%LOCALAPPDATA%\\NetSecAIScanner``; on macOS
-under ``~/Library/Application Support/NetSecAIScanner``; on Linux under
-``$XDG_CONFIG_HOME/netsec-ai-scanner`` (falling back to ``~/.config``). This
-path is overrideable via ``NETSEC_INSTALL_KEY_DIR`` for tests.
+On Windows the key lives under ``%LOCALAPPDATA%\\Aegir``; on macOS under
+``~/Library/Application Support/Aegir``; on Linux under
+``$XDG_CONFIG_HOME/aegir`` (falling back to ``~/.config``). The directory is
+overrideable via ``NETSEC_INSTALL_KEY_DIR`` for tests. Pre-rename installs
+that created keys at the legacy ``NetSecAIScanner`` paths are migrated
+automatically on first launch.
 
 The encryption is intentionally transparent to the application: all callers
 see plaintext strings. It is **not** a substitute for a proper secrets manager
@@ -40,14 +42,26 @@ def _user_config_dir() -> Path:
 
     if sys.platform == "win32":
         base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
-        return Path(base) / "NetSecAIScanner"
+        return Path(base) / "Aegir"
 
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "NetSecAIScanner"
+        return Path.home() / "Library" / "Application Support" / "Aegir"
 
     xdg = os.getenv("XDG_CONFIG_HOME")
     base = Path(xdg) if xdg else Path.home() / ".config"
-    return base / "netsec-ai-scanner"
+    return base / "aegir"
+
+
+def _legacy_user_config_dirs() -> list[Path]:
+    """Pre-rename config dirs to migrate keys from on first launch."""
+    if sys.platform == "win32":
+        base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
+        return [Path(base) / "NetSecAIScanner"]
+    if sys.platform == "darwin":
+        return [Path.home() / "Library" / "Application Support" / "NetSecAIScanner"]
+    xdg = os.getenv("XDG_CONFIG_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".config"
+    return [base / "netsec-ai-scanner"]
 
 
 def _install_key_path() -> Path:
@@ -55,7 +69,7 @@ def _install_key_path() -> Path:
 
 
 _LEGACY_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-_LEGACY_KEY_PATH = _LEGACY_DATA_DIR / ".install_key"
+_LEGACY_DATA_KEY_PATH = _LEGACY_DATA_DIR / ".install_key"
 
 # Fernet keys are URL-safe base64 of a 32-byte secret → exactly 44 bytes on
 # disk. Anything else is almost certainly a corrupt file or whitespace
@@ -79,12 +93,36 @@ def _validate_key_bytes(key: bytes) -> bytes:
 
 
 def _migrate_legacy_key(new_path: Path) -> bytes | None:
-    """Move an older ``data/.install_key`` to the user config dir if present."""
-    if not _LEGACY_KEY_PATH.exists():
-        return None
-    try:
-        legacy = _LEGACY_KEY_PATH.read_bytes().strip()
-        key = _validate_key_bytes(legacy)
+    """Move an older install key to the user config dir if present.
+
+    Two legacy locations are checked, in priority order:
+
+    1. The pre-rename per-user config dir(s) (``NetSecAIScanner`` /
+       ``netsec-ai-scanner``) used after PR #4 (H-8) but before the Aegir
+       rename.
+    2. The very-early ``<repo>/data/.install_key`` location used before H-8.
+
+    The first one that yields a valid Fernet key wins; the others are left
+    in place for forensics and a warning is emitted.
+    """
+    candidates: list[Path] = []
+    for legacy_dir in _legacy_user_config_dirs():
+        candidates.append(legacy_dir / "install.key")
+    candidates.append(_LEGACY_DATA_KEY_PATH)
+
+    for legacy_path in candidates:
+        if not legacy_path.exists():
+            continue
+        try:
+            legacy = legacy_path.read_bytes().strip()
+            key = _validate_key_bytes(legacy)
+        except Exception as exc:
+            logger.warning(
+                "Legacy install key at %s is unusable (%s); skipping",
+                legacy_path,
+                exc,
+            )
+            continue
         new_path.parent.mkdir(parents=True, exist_ok=True)
         new_path.write_bytes(key)
         try:
@@ -92,14 +130,17 @@ def _migrate_legacy_key(new_path: Path) -> bytes | None:
         except OSError:
             logger.debug("Could not chmod migrated install key; continuing")
         try:
-            _LEGACY_KEY_PATH.unlink()
+            legacy_path.unlink()
         except OSError as exc:
-            logger.warning("Migrated legacy install key but could not remove source: %s", exc)
-        logger.info("Migrated install key from %s to %s", _LEGACY_KEY_PATH, new_path)
+            logger.warning(
+                "Migrated legacy install key but could not remove source %s: %s",
+                legacy_path,
+                exc,
+            )
+        logger.info("Migrated install key from %s to %s", legacy_path, new_path)
         return key
-    except Exception as exc:
-        logger.warning("Legacy install key at %s is unusable (%s); generating fresh key", _LEGACY_KEY_PATH, exc)
-        return None
+
+    return None
 
 
 def _load_or_create_key() -> bytes:

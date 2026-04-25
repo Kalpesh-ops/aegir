@@ -1,6 +1,6 @@
 ---
 name: Bug report
-description: Report a bug to help us improve NetSec AI Scanner
+description: Report a bug to help us improve Aegir
 labels: [bug]
 ---
 

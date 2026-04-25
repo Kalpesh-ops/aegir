@@ -1,5 +1,5 @@
 /**
- * NetSec AI Scanner — Electron main process.
+ * Aegir — Electron main process.
  *
  * Responsibilities:
  *   1. Start the Python FastAPI backend as a child process on a free
@@ -13,7 +13,7 @@
  *      `publish` block of electron-builder.yml is populated).
  *
  * Security stance: contextIsolation ON, nodeIntegration OFF, no remote
- * module. The preload exposes a tiny typed surface on `window.netsec`.
+ * module. The preload exposes a tiny typed surface on `window.aegir`.
  */
 
 'use strict';
@@ -122,7 +122,7 @@ async function createMainWindow() {
 
 async function bootstrap() {
   try {
-    log.info('NetSec bootstrap starting (dev=%s)', IS_DEV);
+    log.info('Aegir bootstrap starting (dev=%s)', IS_DEV);
 
     backendHandle = await startBackend({ isDev: IS_DEV, log });
     await waitForBackendReady(backendHandle, { timeoutMs: 30_000, log });
@@ -149,7 +149,7 @@ async function bootstrap() {
     // why the window never appeared.
     const { dialog } = require('electron');
     dialog.showErrorBox(
-      'NetSec failed to start',
+      'Aegir failed to start',
       `${err && err.message ? err.message : err}\n\nSee logs at:\n${log.transports.file.getFile().path}`,
     );
     app.quit();
@@ -159,11 +159,11 @@ async function bootstrap() {
 // --- IPC surface kept deliberately small; see preload.js -------------------
 const { ipcMain } = require('electron');
 
-ipcMain.handle('netsec:getBackendUrl', () => {
+ipcMain.handle('aegir:getBackendUrl', () => {
   return backendHandle ? backendHandle.url : null;
 });
 
-ipcMain.handle('netsec:getAppInfo', () => {
+ipcMain.handle('aegir:getAppInfo', () => {
   return {
     version: app.getVersion(),
     platform: process.platform,

@@ -1,5 +1,5 @@
 """
-NetSec AI Scanner — FastAPI backend.
+Aegir — FastAPI backend.
 
 Designed to run **locally** alongside the frontend (Electron / desktop exe).
 The HTTP listener binds to ``127.0.0.1`` by default and ``TrustedHostMiddleware``
@@ -76,7 +76,7 @@ def _check_rate_limit(key: str, max_calls: int, window_seconds: float) -> bool:
 
 
 # --- App + middleware -------------------------------------------------------
-app = FastAPI(title="NetSec AI Kernel")
+app = FastAPI(title="Aegir Kernel")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -136,7 +136,8 @@ DEFAULT_CORS_ORIGINS = [
     "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
-    "https://netsec-ai-scanner.vercel.app",
+    "https://aegir.live",
+    "https://www.aegir.live",
 ]
 extra_origins = [
     o.strip()
@@ -563,7 +564,7 @@ if __name__ == "__main__":
     from src.queue.worker import run_worker
 
     if sys.stdout is None or sys.stderr is None:
-        log_file = open("netsec-backend.log", "a")
+        log_file = open("aegir-backend.log", "a")
         sys.stdout = log_file
         sys.stderr = log_file
 
@@ -574,5 +575,5 @@ if __name__ == "__main__":
     # default for a local-first app (H-5).
     bind_host = os.getenv("NETSEC_BIND_HOST", "127.0.0.1")
     bind_port = int(os.getenv("NETSEC_BIND_PORT", "8000"))
-    logging.info(f"[*] Starting NetSec AI Kernel on http://{bind_host}:{bind_port}")
+    logging.info(f"[*] Starting Aegir Kernel on http://{bind_host}:{bind_port}")
     uvicorn.run(app, host=bind_host, port=bind_port, reload=False)

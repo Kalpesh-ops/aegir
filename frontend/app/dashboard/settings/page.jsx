@@ -407,7 +407,7 @@ export default function SettingsPage() {
       {/* ── Section 4: About ── */}
       <div style={{ ...sectionCard, marginBottom: 0 }}>
         <p style={sectionLabel}>About</p>
-        <h2 style={sectionTitle}>NetSec AI Scanner</h2>
+        <h2 style={sectionTitle}>Aegir</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {[
             ['Version', '1.0.0-beta'],

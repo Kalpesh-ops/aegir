@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
 
         <h2 style={h2}>What We Collect</h2>
         <p style={p}>
-          NetSec AI Scanner collects security scan targets, CVE lookup results, AI-generated analysis
+          Aegir collects security scan targets, CVE lookup results, AI-generated analysis
           reports, consent records, and the client IP address observed at consent time for audit integrity.
         </p>
 

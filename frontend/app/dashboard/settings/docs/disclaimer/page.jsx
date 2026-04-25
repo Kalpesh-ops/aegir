@@ -99,7 +99,7 @@ export default function DisclaimerPage() {
 
         <h2 style={h2}>Use Scope</h2>
         <p style={p}>
-          NetSec AI Scanner is intended for educational and professional security research and assessment use.
+          Aegir is intended for educational and professional security research and assessment use.
         </p>
 
         <h2 style={h2}>Responsibility</h2>

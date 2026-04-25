@@ -1,6 +1,6 @@
 # Electron Desktop Shell — Architecture
 
-This document describes how NetSec AI Scanner is packaged as a desktop
+This document describes how Aegir is packaged as a desktop
 application (Windows `.exe` primarily, macOS and Linux best-effort).
 
 > **Status:** Shell scaffold landed. Python bundling via PyInstaller and
@@ -18,7 +18,7 @@ application (Windows `.exe` primarily, macOS and Linux best-effort).
 │                                                                     │
 │   ├── electron/backend-supervisor.js                                │
 │   │       spawns:  python server.py   (dev)                         │
-│   │              / netsec-backend.exe (packaged)                    │
+│   │              / aegir-backend.exe (packaged)                    │
 │   │       env:     NETSEC_BIND_HOST=127.0.0.1                       │
 │   │                NETSEC_BIND_PORT=<free port>                     │
 │   │                                                                 │
@@ -46,7 +46,7 @@ application (Windows `.exe` primarily, macOS and Linux best-effort).
 | `sandbox`                          | **true**                                    |
 | `webSecurity`                      | **true**                                    |
 | `devTools` (packaged)              | **false**                                   |
-| Preload bridge                     | `window.netsec` (2 read-only RPCs)          |
+| Preload bridge                     | `window.aegir` (2 read-only RPCs)          |
 | CSP                                | enforced in the main via `onHeadersReceived`|
 | External navigation                | intercepted → system browser                |
 | Backend bind host                  | `127.0.0.1` only                            |
@@ -98,7 +98,7 @@ the scaffold and the packaging PR stay consistent.
    frontend/ → resources/frontend/
                               │
                               ▼
-┌── dist/backend/netsec-backend[.exe] ─────────┐
+┌── dist/backend/aegir-backend[.exe] ─────────┐
 │                                              │
 │  PyInstaller --onedir bundle of server.py    │
 │  (tool choice & spec file TBD in next PR)    │
@@ -110,16 +110,16 @@ the scaffold and the packaging PR stay consistent.
    dist/backend → resources/backend/
 
 Build artefacts under  dist-electron/
-   • NetSec-AI-Scanner-Setup-<version>.exe   (Windows NSIS installer)
-   • NetSec-AI-Scanner-<version>-mac.dmg     (macOS DMG)
-   • NetSec-AI-Scanner-<version>.AppImage    (Linux AppImage)
+   • Aegir-Setup-<version>.exe   (Windows NSIS installer)
+   • Aegir-<version>-mac.dmg     (macOS DMG)
+   • Aegir-<version>.AppImage    (Linux AppImage)
 ```
 
 Build commands (once PyInstaller wiring lands):
 
 ```bash
 npm run frontend:build              # emits frontend/.next/standalone
-# TODO: pyinstaller build step that emits dist/backend/netsec-backend[.exe]
+# TODO: pyinstaller build step that emits dist/backend/aegir-backend[.exe]
 npm run electron:build:win          # Windows installer
 npm run electron:build:mac          # macOS DMG
 npm run electron:build:linux        # Linux AppImage
@@ -146,9 +146,9 @@ four hours. The flow:
 
 `electron-log` writes to the standard per-platform locations:
 
-- **Windows**: `%USERPROFILE%\AppData\Roaming\netsec-ai-scanner\logs\main.log`
-- **macOS**:   `~/Library/Logs/netsec-ai-scanner/main.log`
-- **Linux**:   `~/.config/netsec-ai-scanner/logs/main.log`
+- **Windows**: `%USERPROFILE%\AppData\Roaming\aegir\logs\main.log`
+- **macOS**:   `~/Library/Logs/aegir/main.log`
+- **Linux**:   `~/.config/aegir/logs/main.log`
 
 Sentry or equivalent should be added in a future PR; the scaffold deliberately
 doesn't bake in a vendor choice yet.
@@ -159,8 +159,8 @@ Three commands in order; each step's output feeds the next via the
 `extraResources` mappings declared in `electron-builder.yml`.
 
 ```bash
-# 1. Backend → single-folder bundle at dist/netsec-backend/netsec-backend.exe
-pyinstaller netsec-backend.spec
+# 1. Backend → single-folder bundle at dist/aegir-backend/aegir-backend.exe
+pyinstaller aegir-backend.spec
 
 # 2. Frontend → Next standalone bundle at frontend/.next/standalone/
 cd frontend
@@ -168,12 +168,12 @@ npm ci
 npm run build
 cd ..
 
-# 3. Electron installer → dist-electron/NetSec AI Scanner Setup-<ver>.exe
+# 3. Electron installer → dist-electron/Aegir Setup-<ver>.exe
 npm ci
 npx electron-builder --win nsis
 ```
 
-The PyInstaller spec is at `netsec-backend.spec` (committed). Hidden
+The PyInstaller spec is at `aegir-backend.spec` (committed). Hidden
 imports there cover uvicorn lifespan/protocols, scapy, google-generativeai,
 httpx (used by the dependency installer), and the `nmap` python package.
 

@@ -202,7 +202,7 @@ export default function LoginPage() {
             position: 'relative',
             zIndex: 1,
           }}>
-            NetSec AI Platform
+            Aegir Platform
           </p>
         </div>
       </div>
