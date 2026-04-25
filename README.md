@@ -352,8 +352,8 @@ aegir/
 
 #### 1. Clone the Repository
 ```bash
-git clone https://github.com/Kalpesh-ops/aegir.git
-cd aegir
+git clone https://github.com/Kalpesh-ops/netsec-ai-scanner.git
+cd netsec-ai-scanner
 ```
 
 #### 2. Backend Setup
