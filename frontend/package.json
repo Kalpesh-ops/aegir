@@ -16,7 +16,7 @@
     "@supabase/supabase-js": "2.99.3",
     "@types/three": "0.182.0",
     "axios": "1.13.6",
-    "dompurify": "3.3.3",
+    "dompurify": "3.4.1",
     "framer-motion": "12.29.2",
     "lucide-react": "0.563.0",
     "maath": "0.10.8",
