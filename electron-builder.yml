@@ -1,0 +1,98 @@
+appId: com.netsec.aiscanner
+productName: NetSec AI Scanner
+copyright: Copyright © 2025 Kalpesh
+
+# Directories
+directories:
+  output: dist-electron
+  buildResources: electron/build-resources
+
+# Files bundled inside the asar. Keep this list tight — `extraResources` below
+# handles the heavy non-JS payloads (Python backend, Next standalone).
+files:
+  - electron/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/__pycache__/**"
+
+# Payloads copied verbatim into `resources/`:
+#   frontend/ ← the Next.js standalone server + static assets
+#   backend/  ← the PyInstaller-built FastAPI binary (produced in a follow-up PR)
+#
+# Paths here are relative to the project root. A missing `to:` target just
+# means electron-builder will no-op the entry in environments that haven't
+# built that payload yet, so this config is forward-compatible with the
+# packaging PR.
+extraResources:
+  - from: frontend/.next/standalone
+    to: frontend
+    filter:
+      - "**/*"
+  - from: frontend/.next/static
+    to: frontend/.next/static
+    filter:
+      - "**/*"
+  - from: frontend/public
+    to: frontend/public
+    filter:
+      - "**/*"
+  - from: dist/backend
+    to: backend
+    filter:
+      - "**/*"
+
+# ── Auto-update feed ──────────────────────────────────────────────────────
+# GitHub Releases is free and matches the repo. Populate with a real token +
+# a v* tag push from CI once the release workflow lands.
+publish:
+  - provider: github
+    owner: Kalpesh-ops
+    repo: netsec-ai-scanner
+    releaseType: release
+    vPrefixedTagName: true
+
+# ── Platform-specific packaging ───────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: electron/build-resources/icon.ico
+  # Code-signing config is intentionally left empty until the EV cert is
+  # available. When it is, populate the following keys:
+  #   certificateSubjectName: "<Subject CN on the EV cert>"
+  #   signingHashAlgorithms: [sha256]
+  #   signAndEditExecutable: true
+
+nsis:
+  oneClick: false
+  perMachine: false                 # per-user install avoids UAC prompts
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false   # preserve scan history + install key
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  uninstallDisplayName: NetSec AI Scanner
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: electron/build-resources/icon.icns
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # Notarisation credentials injected via env at CI time:
+  #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Network
+  icon: electron/build-resources/icon.png
+
+# ── Quality-of-life ───────────────────────────────────────────────────────
+asar: true
+compression: maximum
+npmRebuild: false

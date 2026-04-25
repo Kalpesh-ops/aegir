@@ -96,3 +96,10 @@ htmlcov/
 
 #Local Data
 data/*
+
+# Electron
+dist-electron/
+/node_modules/
+electron/build-resources/icon.ico
+electron/build-resources/icon.icns
+electron/build-resources/icon.png
