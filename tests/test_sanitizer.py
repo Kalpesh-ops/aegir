@@ -1,4 +1,9 @@
-from src.utils.data_sanitizer import redact_report_text, redact_enriched_scan, sanitize_scan_data
+from src.utils.data_sanitizer import (
+    redact_enriched_scan,
+    redact_report_text,
+    redact_target_for_storage,
+    sanitize_scan_data,
+)
 
 
 def test_redact_report_text_scrubs_ips_and_pii() -> None:
@@ -45,3 +50,22 @@ def test_sanitize_scan_data_roundtrip() -> None:
     }
     cleaned = sanitize_scan_data(scan)
     assert "AA:BB:CC:DD:EE:FF" not in cleaned["nmap_output"]
+
+
+def test_redact_target_for_storage_ipv4_masks_last_octet() -> None:
+    assert redact_target_for_storage("192.168.1.50") == "192.168.1.XXX"
+    assert redact_target_for_storage("10.0.0.5") == "10.0.0.XXX"
+
+
+def test_redact_target_for_storage_cidr_masks_last_octet() -> None:
+    assert redact_target_for_storage("192.168.1.0/24") == "192.168.1.XXX/24"
+
+
+def test_redact_target_for_storage_hostname_keeps_suffix() -> None:
+    assert redact_target_for_storage("box.internal.example.com") == "***.example.com"
+    assert redact_target_for_storage("server.lan") == "***.server.lan"
+
+
+def test_redact_target_for_storage_preserves_loopback() -> None:
+    assert redact_target_for_storage("localhost") == "localhost"
+    assert redact_target_for_storage("127.0.0.1") == "127.0.0.XXX"

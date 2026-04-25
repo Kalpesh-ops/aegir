@@ -27,10 +27,36 @@ from fastapi import HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://jehssaanufkgidltbwtp.supabase.co").rstrip("/")
-SUPABASE_JWKS_URL = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+def _require_supabase_url() -> str:
+    """
+    Resolve ``SUPABASE_URL`` at use-time rather than import-time.
+
+    Previously this module silently defaulted to a specific Supabase project
+    when the env var was missing, which meant any install without a configured
+    ``SUPABASE_URL`` would happily accept JWTs from an unrelated tenant
+    (audit finding C-3). The default is now removed and we raise at the first
+    point that actually needs the URL — module imports (including tests) still
+    work with the env var unset.
+    """
+    raw = os.getenv("SUPABASE_URL")
+    if not raw:
+        raise RuntimeError(
+            "SUPABASE_URL environment variable is required for JWT verification. "
+            "Set it to your Supabase project URL (e.g. https://abcd.supabase.co) "
+            "before starting the backend."
+        )
+    return raw.rstrip("/")
+
+
 SUPABASE_JWT_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
-SUPABASE_JWT_ISSUER = os.getenv("SUPABASE_JWT_ISSUER", f"{SUPABASE_URL}/auth/v1")
+
+
+def _supabase_jwks_url() -> str:
+    return f"{_require_supabase_url()}/auth/v1/.well-known/jwks.json"
+
+
+def _supabase_jwt_issuer() -> str:
+    return os.getenv("SUPABASE_JWT_ISSUER") or f"{_require_supabase_url()}/auth/v1"
 
 _JWKS_CACHE: dict | None = None
 _JWKS_FETCHED_AT: float = 0.0
@@ -48,7 +74,7 @@ def _fetch_jwks(force: bool = False) -> dict:
             and (now - _JWKS_FETCHED_AT) < _JWKS_CACHE_TTL
         ):
             return _JWKS_CACHE
-        resp = requests.get(SUPABASE_JWKS_URL, timeout=10)
+        resp = requests.get(_supabase_jwks_url(), timeout=10)
         resp.raise_for_status()
         _JWKS_CACHE = resp.json()
         _JWKS_FETCHED_AT = now
@@ -110,7 +136,7 @@ def get_current_user(request: Request) -> str:
             public_key,
             algorithms=["ES256"],
             audience=SUPABASE_JWT_AUDIENCE,
-            issuer=SUPABASE_JWT_ISSUER,
+            issuer=_supabase_jwt_issuer(),
             options={"require": ["exp", "sub", "aud", "iss"]},
         )
     except jwt.ExpiredSignatureError:

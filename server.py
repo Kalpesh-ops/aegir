@@ -145,10 +145,45 @@ CORS_ORIGINS = DEFAULT_CORS_ORIGINS + extra_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    # Auth is carried via an Authorization: Bearer header; we never use
+    # cookies. Keeping allow_credentials off shrinks the attack surface
+    # (browsers will refuse to include cross-origin cookies even if a
+    # malicious site flips its fetch to credentials=include).
+    allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+
+
+# M-10: cap request bodies to a few hundred KB. The largest legitimate payload
+# is an ``/api/analyze`` batch of a few dozen port + CVE objects, well under
+# 64 KB in practice. Anything beyond the limit is either a bug or abuse.
+_MAX_REQUEST_BYTES = int(os.getenv("NETSEC_MAX_REQUEST_BYTES", "262144"))
+
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                length = int(content_length)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid Content-Length header"},
+                )
+            if length > _MAX_REQUEST_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": "Payload too large",
+                        "detail": f"Request body exceeds {_MAX_REQUEST_BYTES} bytes",
+                    },
+                )
+        return await call_next(request)
+
+
+app.add_middleware(BodySizeLimitMiddleware)
 
 ALLOWED_HOSTS = [
     h.strip()
@@ -413,7 +448,24 @@ async def update_api_key(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "backend": "online", "version": "2.1"}
+    """
+    Minimal liveness probe. Intentionally omits build/version details so an
+    unauthenticated caller cannot fingerprint the install for targeted
+    exploitation (L-9). The authenticated ``/api/status`` endpoint returns
+    the full version plus any runtime flags the UI needs.
+    """
+    return {"status": "healthy"}
+
+
+@app.get("/api/status")
+async def detailed_status(user_id: str = Depends(get_current_user)):
+    """Authenticated status endpoint exposing build metadata."""
+    return {
+        "status": "healthy",
+        "backend": "online",
+        "version": os.getenv("NETSEC_APP_VERSION", "2.1"),
+        "user_id": user_id,
+    }
 
 
 if __name__ == "__main__":
