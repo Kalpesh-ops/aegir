@@ -52,6 +52,25 @@ async function startFrontendServer({ isDev, backendUrl, log }) {
     );
   }
 
+  // First-launch migration: electron-builder 26 strips files named
+  // `node_modules` from `extraResources` on macOS/Linux signing pipelines and
+  // on some Windows asar configurations, leaving the standalone server with
+  // no runtime modules. Workaround (validated in feat/windows-app-packaging):
+  // ship the directory pre-renamed as `bundled_modules` and rename it back on
+  // the user's machine the first time the app launches. Cheap, idempotent,
+  // and survives auto-update because the new payload re-ships the bundled
+  // copy and the rename re-runs.
+  const bundledModules = path.join(resourcesRoot, 'bundled_modules');
+  const nodeModules = path.join(resourcesRoot, 'node_modules');
+  if (fs.existsSync(bundledModules) && !fs.existsSync(nodeModules)) {
+    try {
+      fs.renameSync(bundledModules, nodeModules);
+      log.info('Migrated bundled_modules -> node_modules on first launch.');
+    } catch (err) {
+      log.warn('bundled_modules migration failed:', err.message);
+    }
+  }
+
   const port = await findFreePort();
   const env = {
     ...process.env,

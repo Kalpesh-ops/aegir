@@ -58,6 +58,13 @@ win:
     - target: nsis
       arch: [x64]
   icon: electron/build-resources/icon.ico
+  # Scapy + Wireshark/TShark live-capture on Windows requires elevated
+  # privileges (raw socket / WinPcap access). Without this, scans silently
+  # fall back to "Nmap-only" mode and the user gets confusing partial results.
+  # The trade-off is that *every* feature in the app inherits admin rights;
+  # see docs/architecture/electron.md for the per-process elevation we plan
+  # to migrate to once the dependency-installer flow is hardened.
+  requestedExecutionLevel: requireAdministrator
   # Code-signing config is intentionally left empty until the EV cert is
   # available. When it is, populate the following keys:
   #   certificateSubjectName: "<Subject CN on the EV cert>"
@@ -66,7 +73,7 @@ win:
 
 nsis:
   oneClick: false
-  perMachine: false                 # per-user install avoids UAC prompts
+  perMachine: false                 # per-user install avoids forcing UAC for the *installer*; the installed app still requires admin to run (see win.requestedExecutionLevel).
   allowElevation: true
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false   # preserve scan history + install key
