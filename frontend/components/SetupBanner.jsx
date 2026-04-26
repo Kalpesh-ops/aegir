@@ -32,7 +32,7 @@ export default function SetupBanner() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setDismissed(sessionStorage.getItem('netsec.setup-banner.dismissed') === '1')
+      setDismissed(sessionStorage.getItem('aegir.setup-banner.dismissed') === '1')
     }
 
     async function probe() {
@@ -62,7 +62,7 @@ export default function SetupBanner() {
 
   function dismiss() {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('netsec.setup-banner.dismissed', '1')
+      sessionStorage.setItem('aegir.setup-banner.dismissed', '1')
     }
     setDismissed(true)
   }

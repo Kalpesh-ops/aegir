@@ -81,7 +81,7 @@ export default async function DashboardLayout({ children }) {
               display: 'inline-block',
               flexShrink: 0,
             }} />
-            NETSEC AI
+            AEGIR
           </Link>
           <p style={{
             fontFamily: "'JetBrains Mono', monospace",

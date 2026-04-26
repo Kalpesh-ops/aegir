@@ -1,4 +1,4 @@
--- Row Level Security policies for NetSec AI Scanner.
+-- Row Level Security policies for Aegir.
 --
 -- Apply this script from the Supabase SQL editor *after* the tables have been
 -- created. It is idempotent — every statement uses IF NOT EXISTS / DROP IF

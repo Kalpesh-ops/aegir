@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-NetSec AI Scanner is a student-led project in active development.
+Aegir is a student-led project in active development.
 
 At this stage, security fixes are prioritized for:
 
@@ -34,4 +34,4 @@ We aim to:
 
 ## Responsible Use
 
-NetSec AI Scanner is intended for authorized security testing only. Do not scan systems or networks you do not own or explicitly have permission to test.
+Aegir is intended for authorized security testing only. Do not scan systems or networks you do not own or explicitly have permission to test.

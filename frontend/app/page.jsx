@@ -35,7 +35,7 @@ export default function Home() {
         <div className="hero-glow" />
         <div className="hero-content">
           <div className="hero-eyebrow">Network Security Intelligence Platform</div>
-          <h1 className="hero-h1">NETSEC<span className="accent">.</span></h1>
+          <h1 className="hero-h1">AEGIR<span className="accent">.</span></h1>
           <div className="hero-h1-sub">INTELLIGENCE</div>
           <p className="hero-sub">
             Real CVE correlation. AI-powered analysis. Your network&apos;s threat surface, decoded in seconds.
@@ -168,7 +168,7 @@ export default function Home() {
                 <div className="terminal-dot" style={{ background: '#ff5f57' }} />
                 <div className="terminal-dot" style={{ background: '#ffbd2e' }} />
                 <div className="terminal-dot" style={{ background: '#28c840' }} />
-                <span className="terminal-title">netsec-ai — scanner kernel</span>
+                <span className="terminal-title">aegir — scanner kernel</span>
               </div>
               <div className="terminal-body" id="terminal-body">
                 {[

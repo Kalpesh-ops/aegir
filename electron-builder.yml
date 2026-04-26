@@ -1,5 +1,5 @@
-appId: com.netsec.aiscanner
-productName: NetSec AI Scanner
+appId: live.aegir.app
+productName: Aegir
 copyright: Copyright © 2025 Kalpesh
 
 # Directories
@@ -79,7 +79,7 @@ nsis:
   deleteAppDataOnUninstall: false   # preserve scan history + install key
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  uninstallDisplayName: NetSec AI Scanner
+  uninstallDisplayName: Aegir
 
 mac:
   target:

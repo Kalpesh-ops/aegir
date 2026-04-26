@@ -29,11 +29,11 @@ export default function Footer() {
   return (
     <footer id="footer">
       <div className="footer-hero-wrap">
-        <span className="footer-hero-text" id="footer-hero-text">NETSEC AI</span>
+        <span className="footer-hero-text" id="footer-hero-text">AEGIR</span>
       </div>
       <div className="footer-top">
         <div className="footer-brand">
-          <div className="footer-logo">NETSEC AI</div>
+          <div className="footer-logo">AEGIR</div>
           <div className="footer-tagline">Network Security Intelligence</div>
         </div>
         <div className="footer-links">
@@ -47,7 +47,7 @@ export default function Footer() {
         </div>
       </div>
       <div className="footer-bottom">
-        <div className="footer-copy">© 2026 NetSec AI — Built with intent.</div>
+        <div className="footer-copy">© 2026 Aegir — Built with intent.</div>
         <div className="footer-copy">Apache 2.0 License</div>
       </div>
     </footer>

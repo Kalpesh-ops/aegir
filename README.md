@@ -1,4 +1,4 @@
-# 🛡️ NetSec AI Scanner
+# 🛡️ Aegir
 
 > *Automated Network Vulnerability Scanning & AI-Powered Threat Intelligence*
 
@@ -22,7 +22,7 @@ Network security tools generate high-fidelity data, but the output is often too 
 
 ## 💡 The Solution
 
-**NetSec AI** turns raw network telemetry into clear, actionable security guidance:
+**Aegir** turns raw network telemetry into clear, actionable security guidance:
 
 1.  **Scans** the network using industry-standard engines (Nmap, Scapy & TShark).
 2.  **Correlates** discovered services against **247K+ real CVEs** from the CIRCL vulnerability database — pure determinism, no AI at this stage.
@@ -231,7 +231,7 @@ flowchart LR
 ## 📂 Directory Structure
 
 ```
-netsec-ai-scanner/
+aegir/
 │
 ├── 📄 server.py                         # FastAPI entry (routes, middleware, worker bootstrap)
 ├── 📄 requirements.txt                  # Python dependencies
@@ -537,7 +537,7 @@ curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
 ## 🌐 Production Deployment
 
 ### Live Application
-**Frontend:** [https://netsec-ai-scanner.vercel.app](https://netsec-ai-scanner.vercel.app)
+**Frontend:** [https://aegir.vercel.app](https://aegir.vercel.app)
 
 ### Deployment Architecture
 

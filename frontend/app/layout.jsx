@@ -23,7 +23,7 @@ const instrumentSans = Instrument_Sans({
 })
 
 export const metadata = {
-  title: 'NetSec AI — Network Intelligence Scanner',
+  title: 'Aegir — Network Intelligence Scanner',
   description: 'Real CVE correlation. AI-powered analysis. Your network\'s threat surface, decoded in seconds.',
 }
 

@@ -18,7 +18,7 @@ export default function Navbar() {
     <nav id="navbar" className={scrolled ? 'scrolled' : ''}>
       <Link href="/" className="nav-logo">
         <span className="nav-logo-dot" />
-        NETSEC AI
+        AEGIR
       </Link>
       <ul className="nav-links">
         <li><a href="#features">Features</a></li>

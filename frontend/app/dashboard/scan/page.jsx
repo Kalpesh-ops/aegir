@@ -329,7 +329,7 @@ export default function ScanPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `netsec-scan-${scanId}.json`
+    a.download = `aegir-scan-${scanId}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -340,7 +340,7 @@ export default function ScanPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `netsec-report-${scanId}.md`
+    a.download = `aegir-report-${scanId}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -416,18 +416,18 @@ export default function ScanPage() {
         .log-scroll::-webkit-scrollbar { width:4px; }
         .log-scroll::-webkit-scrollbar-track { background:transparent; }
         .log-scroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
-        .prose-netsec h1 { font-family:'Syne',sans-serif; font-weight:600; font-size:24px; color:#f0ede8; margin:0 0 16px; }
-        .prose-netsec h2 { font-family:'Syne',sans-serif; font-weight:600; font-size:18px; color:#f0ede8; margin:24px 0 12px; }
-        .prose-netsec h3 { font-family:'Syne',sans-serif; font-weight:500; font-size:15px; color:#f0ede8; margin:20px 0 8px; }
-        .prose-netsec p { font-family:'Instrument Sans',sans-serif; font-size:14px; color:rgba(240,237,232,0.7); line-height:1.7; margin:0 0 12px; }
-        .prose-netsec code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:2px; color:#00ff88; }
-        .prose-netsec pre { background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06); padding:16px; border-radius:4px; overflow:auto; margin:16px 0; }
-        .prose-netsec pre code { background:none; padding:0; }
-        .prose-netsec ul { list-style:none; padding:0; margin:0 0 12px; }
-        .prose-netsec ul li { padding:6px 0 6px 20px; position:relative; font-family:'Instrument Sans',sans-serif; font-size:14px; color:rgba(240,237,232,0.7); }
-        .prose-netsec ul li::before { content:'→'; position:absolute; left:0; color:#00ff88; font-family:'JetBrains Mono',monospace; }
-        .prose-netsec strong { color:#00ff88; font-weight:600; }
-        .prose-netsec blockquote { border-left:3px solid #ff4560; padding-left:16px; margin:16px 0; color:rgba(240,237,232,0.5); font-style:italic; }
+        .prose-aegir h1 { font-family:'Syne',sans-serif; font-weight:600; font-size:24px; color:#f0ede8; margin:0 0 16px; }
+        .prose-aegir h2 { font-family:'Syne',sans-serif; font-weight:600; font-size:18px; color:#f0ede8; margin:24px 0 12px; }
+        .prose-aegir h3 { font-family:'Syne',sans-serif; font-weight:500; font-size:15px; color:#f0ede8; margin:20px 0 8px; }
+        .prose-aegir p { font-family:'Instrument Sans',sans-serif; font-size:14px; color:rgba(240,237,232,0.7); line-height:1.7; margin:0 0 12px; }
+        .prose-aegir code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:2px; color:#00ff88; }
+        .prose-aegir pre { background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06); padding:16px; border-radius:4px; overflow:auto; margin:16px 0; }
+        .prose-aegir pre code { background:none; padding:0; }
+        .prose-aegir ul { list-style:none; padding:0; margin:0 0 12px; }
+        .prose-aegir ul li { padding:6px 0 6px 20px; position:relative; font-family:'Instrument Sans',sans-serif; font-size:14px; color:rgba(240,237,232,0.7); }
+        .prose-aegir ul li::before { content:'→'; position:absolute; left:0; color:#00ff88; font-family:'JetBrains Mono',monospace; }
+        .prose-aegir strong { color:#00ff88; font-weight:600; }
+        .prose-aegir blockquote { border-left:3px solid #ff4560; padding-left:16px; margin:16px 0; color:rgba(240,237,232,0.5); font-style:italic; }
         .port-card:hover { border-color:rgba(0,255,136,0.3) !important; }
       `}</style>
 
@@ -570,7 +570,7 @@ export default function ScanPage() {
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ffbd2e' }} />
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#28c840' }} />
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: 'rgba(240,237,232,0.3)', letterSpacing: '0.1em', marginLeft: '4px' }}>
-                  netsec-ai — scanner kernel
+                  aegir — scanner kernel
                 </span>
                 <div style={{ marginLeft: 'auto' }}>
                   <span style={{
@@ -686,7 +686,7 @@ export default function ScanPage() {
                 maxHeight: '600px',
                 overflowY: 'auto',
               }}>
-                <div className="prose-netsec">
+                <div className="prose-aegir">
                   <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
                     {results.ai_summary || 'No report generated.'}
                   </ReactMarkdown>

@@ -1,4 +1,4 @@
-# NetSec AI Scanner: Comprehensive Technical Report
+# Aegir: Comprehensive Technical Report
 
 **A Research-Grade Analysis of AI-Augmented Network Security Intelligence**
 
@@ -8,7 +8,7 @@
 
 ## Abstract
 
-This report presents a comprehensive technical analysis of **NetSec AI Scanner**, an automated network vulnerability scanning platform that fuses industry-standard reconnaissance engines (Nmap, Scapy, TShark) with Google Gemini 2.5 Flash to transform opaque network telemetry into plain-English, actionable security intelligence. The system is architected around four pillars: (1) a decoupled async scan pipeline backed by a SQLite FIFO job queue; (2) deterministic CVE correlation against 247 000+ real-world vulnerabilities via the CIRCL API; (3) a three-tier AI report cache (local SQLite → global Supabase → Gemini API) that eliminates redundant LLM calls; and (4) a privacy-by-design data layer that strips all personally identifiable information before any data leaves the server. This report details the full system architecture, per-module implementation, measured performance benchmarks (sanitization throughput 5 524 KB/s, AI latency 3–12 s, end-to-end scan 38–225 s), a comparative analysis against Nmap, OpenVAS, Nessus, Qualys and Tenable.io, and a discussion of uniqueness, limitations, and research directions.
+This report presents a comprehensive technical analysis of **Aegir**, an automated network vulnerability scanning platform that fuses industry-standard reconnaissance engines (Nmap, Scapy, TShark) with Google Gemini 2.5 Flash to transform opaque network telemetry into plain-English, actionable security intelligence. The system is architected around four pillars: (1) a decoupled async scan pipeline backed by a SQLite FIFO job queue; (2) deterministic CVE correlation against 247 000+ real-world vulnerabilities via the CIRCL API; (3) a three-tier AI report cache (local SQLite → global Supabase → Gemini API) that eliminates redundant LLM calls; and (4) a privacy-by-design data layer that strips all personally identifiable information before any data leaves the server. This report details the full system architecture, per-module implementation, measured performance benchmarks (sanitization throughput 5 524 KB/s, AI latency 3–12 s, end-to-end scan 38–225 s), a comparative analysis against Nmap, OpenVAS, Nessus, Qualys and Tenable.io, and a discussion of uniqueness, limitations, and research directions.
 
 **Keywords**: Network Security, Vulnerability Assessment, Artificial Intelligence, LLM, Privacy-by-Design, FastAPI, Next.js, Google Gemini, CIRCL CVE, GDPR
 
@@ -47,7 +47,7 @@ Additionally, organizations using multiple standalone tools face a **fragmentati
 
 ### 1.2 The Solution
 
-**NetSec AI Scanner** addresses both challenges — comprehension and fragmentation — through a unified, four-stage intelligent pipeline:
+**Aegir** addresses both challenges — comprehension and fragmentation — through a unified, four-stage intelligent pipeline:
 
 ```
 [Reconnaissance]  →  [CVE Correlation]  →  [AI Analysis]  →  [Presentation]
@@ -234,7 +234,7 @@ POST /api/scan  (JWT-authenticated)
 ## 3. Directory Structure & Module Guide
 
 ```
-netsec-ai-scanner/
+aegir/
 |
 +-- server.py                    <- FastAPI app, routes, middleware, worker bootstrap
 +-- requirements.txt             <- Python dependencies
@@ -637,7 +637,7 @@ The 3-tier cache converts a 6-12 second API call into a sub-millisecond local lo
 
 ### 7.1 Feature Comparison Matrix
 
-| Feature | NetSec AI | Nmap (alone) | OpenVAS/GVM | Nessus | Qualys VMDR | Tenable.io |
+| Feature | Aegir | Nmap (alone) | OpenVAS/GVM | Nessus | Qualys VMDR | Tenable.io |
 |---------|-----------|-------------|------------|--------|------------|------------|
 | Port scanning | YES (via Nmap) | YES | YES | YES | YES | YES |
 | Service version detection | YES | YES | YES | YES | YES | YES |
@@ -660,7 +660,7 @@ The 3-tier cache converts a 6-12 second API call into a sub-millisecond local lo
 
 ### 7.2 vs. Nmap (standalone) — The Comprehension Gap
 
-Nmap is the de facto standard port scanner and the scanning engine NetSec AI itself uses. The key differentiation is everything that happens *after* the scan:
+Nmap is the de facto standard port scanner and the scanning engine Aegir itself uses. The key differentiation is everything that happens *after* the scan:
 
 ```
 Nmap alone output:
@@ -673,7 +673,7 @@ Nmap alone output:
     4. Write their own report
   Time: 30-120 minutes of manual work
 
-NetSec AI output (36 seconds total):
+Aegir output (36 seconds total):
   "High Risk: Apache 2.4.54 is affected by CVE-2022-22720 (CVSS 9.8).
    A path traversal vulnerability allows attackers to access files outside
    the web root. Immediate action required:
@@ -688,13 +688,13 @@ NetSec AI output (36 seconds total):
 |----------|-----------|--------------|-------|
 | Nmap alone | 28 s | 30-120 min (manual) | 30-120 min |
 | Nmap + manual CVE lookup | 28 s | 15-60 min | 15-60 min |
-| **NetSec AI (fast mode)** | **28 s** | **8 s (AI)** | **~36 s** |
+| **Aegir (fast mode)** | **28 s** | **8 s (AI)** | **~36 s** |
 
 This represents a **99%+ reduction in time-to-insight**.
 
 ### 7.3 vs. OpenVAS / GVM
 
-| Dimension | OpenVAS | NetSec AI Scanner |
+| Dimension | OpenVAS | Aegir |
 |-----------|---------|------------------|
 | Setup complexity | Very High (Docker, root) | Low (pip + npm install) |
 | RAM requirement | 8 GB+ recommended | 1 GB minimum |
@@ -708,7 +708,7 @@ This represents a **99%+ reduction in time-to-insight**.
 
 ### 7.4 vs. Nessus / Tenable.io
 
-| Dimension | Nessus Professional | NetSec AI Scanner |
+| Dimension | Nessus Professional | Aegir |
 |-----------|--------------------|--------------------|
 | Annual cost | $4 000 - $8 000 | **$0** |
 | CVE database | Tenable proprietary (200K+ checks) | CIRCL (247K+ CVEs) |
@@ -724,16 +724,16 @@ This represents a **99%+ reduction in time-to-insight**.
 
 | Tool | True Positives | False Positives | False Negatives | Precision | Recall |
 |------|---------------|-----------------|-----------------|-----------|--------|
-| NetSec AI (deep) | 42 | 3 | 8 | 93.3% | 84.0% |
+| Aegir (deep) | 42 | 3 | 8 | 93.3% | 84.0% |
 | Nmap + NSE scripts | 45 | 8 | 5 | 84.9% | 90.0% |
 | OpenVAS (full scan) | 48 | 12 | 2 | 80.0% | 96.0% |
 | Nessus Professional | 48 | 2 | 2 | 96.0% | 96.0% |
 
-**Analysis**: NetSec AI's AI layer reduces false positives relative to Nmap alone (3 vs. 8). Gemini correctly identified 5 NSE findings that were theoretical vulnerabilities not exploitable on the test target. A team that acts on 42 correctly identified and explained CVEs is more secure than one that ignores 48 cryptic findings.
+**Analysis**: Aegir's AI layer reduces false positives relative to Nmap alone (3 vs. 8). Gemini correctly identified 5 NSE findings that were theoretical vulnerabilities not exploitable on the test target. A team that acts on 42 correctly identified and explained CVEs is more secure than one that ignores 48 cryptic findings.
 
 ### 7.6 Uniqueness Summary
 
-The following combination of features is unique to NetSec AI Scanner:
+The following combination of features is unique to Aegir:
 
 ```
 No single existing tool (open-source or commercial) provides ALL of:
@@ -883,7 +883,7 @@ Stage 3:  Docker + Kubernetes + Celery worker pool
 
 ### 11.1 Summary
 
-NetSec AI Scanner solves a real and pressing problem: **the gap between collecting network security data and acting on it**. By integrating Nmap, Scapy, TShark, the CIRCL CVE database, and Google Gemini 2.5 Flash into a single coherent platform — with privacy, caching, authentication, and consent built into the architecture from the start — the project delivers executive-grade threat intelligence accessible to security beginners and experts alike.
+Aegir solves a real and pressing problem: **the gap between collecting network security data and acting on it**. By integrating Nmap, Scapy, TShark, the CIRCL CVE database, and Google Gemini 2.5 Flash into a single coherent platform — with privacy, caching, authentication, and consent built into the architecture from the start — the project delivers executive-grade threat intelligence accessible to security beginners and experts alike.
 
 **Quantified achievements:**
 - **99%+ reduction** in time-to-actionable-insight vs. manual Nmap analysis
@@ -900,7 +900,7 @@ Using Nmap, OpenVAS, Wireshark, NVD CVE lookup, and a manual report template sep
 - Hours to correlate results across tools
 - A security writer to translate findings into business language
 
-NetSec AI collapses this entire workflow into a single 36-second operation that produces a human-readable, actionable report automatically. The 3-tier AI cache means repeat scans of common infrastructure return reports instantly. The privacy layer makes the tool safe to use in regulated environments without risking GDPR violations from sending raw scan data to an AI provider.
+Aegir collapses this entire workflow into a single 36-second operation that produces a human-readable, actionable report automatically. The 3-tier AI cache means repeat scans of common infrastructure return reports instantly. The privacy layer makes the tool safe to use in regulated environments without risking GDPR violations from sending raw scan data to an AI provider.
 
 ### 11.3 Broader Impact
 
@@ -1049,4 +1049,4 @@ CREATE TABLE global_ai_cache (
 
 ---
 
-*This report was generated from a full code analysis of the NetSec AI Scanner repository. All benchmark figures are based on empirical measurements on the described test environment. Comparative figures for third-party tools are derived from their official documentation and published benchmarks.*
+*This report was generated from a full code analysis of the Aegir repository. All benchmark figures are based on empirical measurements on the described test environment. Comparative figures for third-party tools are derived from their official documentation and published benchmarks.*

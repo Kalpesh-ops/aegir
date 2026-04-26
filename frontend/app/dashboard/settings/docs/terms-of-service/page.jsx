@@ -105,7 +105,7 @@ export default function TermsOfServicePage() {
         <h2 style={h2}>Authorized Use Only</h2>
         <p style={p}>
           You must own, control, or have explicit written authorization to scan any network or host through
-          NetSec AI Scanner. Unauthorized scanning is prohibited.
+          Aegir. Unauthorized scanning is prohibited.
         </p>
 
         <h2 style={h2}>Public IP Restrictions</h2>
@@ -122,7 +122,7 @@ export default function TermsOfServicePage() {
 
         <h2 style={h2}>As-Is Service</h2>
         <p style={p}>
-          NetSec AI Scanner is provided as-is for educational and professional security assessment use.
+          Aegir is provided as-is for educational and professional security assessment use.
           Features may change without notice.
         </p>
 

@@ -1,4 +1,4 @@
-# Contributing to NetSec AI Scanner
+# Contributing to Aegir
 
 Thank you for your interest in contributing.
 
@@ -77,4 +77,4 @@ Frontend:
 - Prefer readable code over clever code
 - If unsure about direction, open an issue first and ask
 
-Thanks again for helping improve NetSec AI Scanner.
+Thanks again for helping improve Aegir.

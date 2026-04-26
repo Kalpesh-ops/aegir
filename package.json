@@ -1,6 +1,6 @@
 {
-  "name": "netsec-ai-scanner",
-  "productName": "NetSec AI Scanner",
+  "name": "aegir",
+  "productName": "Aegir",
   "version": "2.1.0",
   "description": "Local-first network security scanner with AI-generated remediation.",
   "author": {
@@ -8,7 +8,7 @@
     "email": "welldonejason111@gmail.com"
   },
   "license": "Apache-2.0",
-  "homepage": "https://github.com/Kalpesh-ops/netsec-ai-scanner",
+  "homepage": "https://aegir.live",
   "main": "electron/main.js",
   "private": true,
   "scripts": {

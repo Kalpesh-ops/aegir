@@ -52,7 +52,7 @@ function resolveBackendCommand(isDev) {
 
   // Packaged layout. The bundled binary is placed under resources/ by
   // electron-builder via the extraResources mapping in electron-builder.yml.
-  const binName = process.platform === 'win32' ? 'netsec-backend.exe' : 'netsec-backend';
+  const binName = process.platform === 'win32' ? 'aegir-backend.exe' : 'aegir-backend';
   const resourcesRoot = path.join(process.resourcesPath, 'backend');
   const candidate = path.join(resourcesRoot, binName);
   if (!fs.existsSync(candidate)) {
