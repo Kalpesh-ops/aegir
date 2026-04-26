@@ -239,7 +239,7 @@ export default function LoginPage() {
               boxShadow: '0 0 12px #00ff88',
               display: 'inline-block',
             }} />
-            NETSEC AI
+            AEGIR
           </Link>
 
           <h1 style={{

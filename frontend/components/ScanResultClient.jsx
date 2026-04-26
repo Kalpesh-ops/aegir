@@ -125,7 +125,7 @@ export default function ScanResultClient({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `netsec-scan-${scanIdShort}.json`
+    a.download = `aegir-scan-${scanIdShort}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -135,7 +135,7 @@ export default function ScanResultClient({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `netsec-report-${scanIdShort}.md`
+    a.download = `aegir-report-${scanIdShort}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
