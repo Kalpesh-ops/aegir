@@ -2,7 +2,7 @@
 
 **A Research-Grade Analysis of AI-Augmented Network Security Intelligence**
 
-> **Version**: 2.0 | **Date**: April 2026 | **Repository**: [github.com/Kalpesh-ops/netsec-ai-scanner](https://github.com/Kalpesh-ops/netsec-ai-scanner)
+> **Version**: 2.0 | **Date**: April 2026 | **Repository**: [github.com/Kalpesh-ops/aegir](https://github.com/Kalpesh-ops/aegir)
 
 ---
 

@@ -39,7 +39,7 @@ export default function Footer() {
         <div className="footer-links">
           <a href="#features">Features</a>
           <a href="#how-it-works">How It Works</a>
-          <a href="https://github.com/Kalpesh-ops/netsec-ai-scanner">GitHub</a>
+          <a href="https://github.com/Kalpesh-ops/aegir">GitHub</a>
         </div>
         <div className="footer-status">
           <span className="dot" />

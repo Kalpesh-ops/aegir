@@ -48,7 +48,7 @@ extraResources:
 publish:
   - provider: github
     owner: Kalpesh-ops
-    repo: netsec-ai-scanner
+    repo: aegir
     releaseType: release
     vPrefixedTagName: true
 
