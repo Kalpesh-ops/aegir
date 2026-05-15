@@ -88,10 +88,10 @@ export default function PrivacyPolicyPage() {
   return (
     <div style={pageWrap}>
       <Link
-        href="/dashboard/settings"
+        href="/"
         style={backButton}
       >
-        Back to Settings
+        Back to Home
       </Link>
 
       <div style={sectionCard}>
@@ -138,7 +138,7 @@ export default function PrivacyPolicyPage() {
         <ul style={{ margin: '0 0 14px 18px' }}>
           <li style={li}>Request access to your stored scan and consent records.</li>
           <li style={li}>Request deletion of your account-linked records where legally permissible.</li>
-          <li style={li}>Revoke advanced-scan consent at any time from the Settings page.</li>
+          <li style={li}>Revoke advanced-scan consent at any time from inside the desktop app.</li>
         </ul>
 
         <h2 style={h2}>Contact</h2>

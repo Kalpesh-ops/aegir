@@ -21,13 +21,18 @@ export default function Navbar() {
         AEGIR
       </Link>
       <ul className="nav-links">
-        <li><a href="#features">Features</a></li>
-        <li><a href="#how-it-works">How It Works</a></li>
-        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="/#features">Features</a></li>
+        <li><a href="/#how-it-works">How It Works</a></li>
+        <li><a href="/#privacy">Privacy</a></li>
         <li><Link href="/dashboard">Dashboard</Link></li>
+        <li>
+          <a href="https://github.com/Kalpesh-ops/aegir" target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+        </li>
       </ul>
-      <Link href="/login" className="nav-cta">
-        Launch Scanner
+      <Link href="/dashboard" className="nav-cta">
+        Launch Demo
       </Link>
     </nav>
   )

@@ -84,66 +84,58 @@ const backButton = {
   transition: 'all 0.2s',
 }
 
-export default function PrivacyPolicyPage() {
+export default function ConsentPolicyPage() {
   return (
     <div style={pageWrap}>
       <Link
-        href="/dashboard/settings"
+        href="/"
         style={backButton}
       >
-        Back to Settings
+        Back to Home
       </Link>
 
       <div style={sectionCard}>
         <p style={eyebrow}>Documentation</p>
-        <h1 style={title}>Privacy Policy</h1>
+        <h1 style={title}>User Consent Policy</h1>
         <div style={meta}>
           <span style={metaPill}>Effective Date: {EFFECTIVE_DATE}</span>
           <span style={metaPill}>Version: {POLICY_VERSION}</span>
         </div>
 
-        <h2 style={h2}>What We Collect</h2>
+        <h2 style={h2}>What Consent Gates</h2>
         <p style={p}>
-          Aegir collects security scan targets, CVE lookup results, AI-generated analysis
-          reports, consent records, and the client IP address observed at consent time for audit integrity.
+          Consent is required to unlock Deep and Pen Test modes because these modes use elevated
+          network inspection capabilities beyond baseline fast scanning.
         </p>
 
-        <h2 style={h2}>What Stays Local</h2>
+        <h2 style={h2}>What Elevated Access Means</h2>
         <ul style={{ margin: '0 0 14px 18px' }}>
-          <li style={li}>TShark packet capture files and capture metadata generated on your host.</li>
-          <li style={li}>Scapy probe outputs used for firewall inference on your environment.</li>
-          <li style={li}>Local network interface detection details used to bind capture interfaces.</li>
-          <li style={li}>Nmap XML output and temporary parse artifacts produced during scan execution.</li>
+          <li style={li}>Scapy raw socket probes are used for firewall behavior inference.</li>
+          <li style={li}>TShark runs controlled packet-header capture during Pen Test mode windows.</li>
         </ul>
 
-        <h2 style={h2}>What Goes To Supabase</h2>
+        <h2 style={h2}>What Is Not Captured</h2>
         <p style={p}>
-          The backend stores scan metadata (such as scan mode, counts, and timestamps), redacted vulnerability
-          summaries, AI summaries, and your consent audit trail for account history and compliance records.
+          The system does not intentionally capture packet payload content, account credentials,
+          or application message bodies as part of these advanced mode workflows.
         </p>
 
-        <h2 style={h2}>Third-Party Data Flow</h2>
-        <ul style={{ margin: '0 0 14px 18px' }}>
-          <li style={li}>
-            CIRCL CVE API receives only product and vendor strings required for vulnerability enrichment.
-            IP addresses and direct targets are not sent.
-          </li>
-          <li style={li}>
-            Google Gemini receives redacted port and CVE context for advisory summarization. Direct scan targets,
-            host identifiers, and raw packet capture data are excluded.
-          </li>
-        </ul>
-
-        <h2 style={h2}>Your Rights</h2>
-        <ul style={{ margin: '0 0 14px 18px' }}>
-          <li style={li}>Request access to your stored scan and consent records.</li>
-          <li style={li}>Request deletion of your account-linked records where legally permissible.</li>
-          <li style={li}>Revoke advanced-scan consent at any time from the Settings page.</li>
-        </ul>
-
-        <h2 style={h2}>Contact</h2>
+        <h2 style={h2}>How Consent Is Recorded</h2>
         <p style={p}>
-          A dedicated security contact channel will be published with the public release of Aegir.
+          Consent records include timestamp, policy version, consent method, and client IP address
+          to support account-level auditability and revocation history.
+        </p>
+
+        <h2 style={h2}>Revocation</h2>
+        <p style={p}>
+          You may revoke consent at any time from Settings. Revocation immediately disables Deep and
+          Pen Test modes for your account until consent is granted again.
+        </p>
+
+        <h2 style={h2}>Effect Of Revocation</h2>
+        <p style={p}>
+          Existing historical scan records remain in your account history unless separately deleted,
+          but no new elevated-access scans can be initiated while consent remains inactive.
         </p>
       </div>
     </div>

@@ -103,3 +103,11 @@ dist-electron/
 electron/build-resources/icon.ico
 electron/build-resources/icon.icns
 electron/build-resources/icon.png
+
+# Showcase build artifacts
+/frontend/out/
+/.venv-test/
+/test-plan-aegir-rename.md
+/test-report-aegir-rename.md
+/scripts/
+/package-lock.json

@@ -1,26 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL + '/api/:path*',
-      },
-    ]
-  },
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-XSS-Protection', value: '1; mode=block' },
-          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-        ],
-      },
-    ]
-  },
+  // Showcase build: emit a fully static site to /frontend/out so it can be
+  // hosted on any object storage / CDN with no backend at all.
+  output: 'export',
+  // Static exports cannot use the default next/image optimizer at runtime.
+  images: { unoptimized: true },
+  // Avoid relying on server-side trailing-slash redirects; emit deterministic
+  // index.html files for every route.
+  trailingSlash: true,
 }
 export default nextConfig

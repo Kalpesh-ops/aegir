@@ -41,11 +41,11 @@ export default function Home() {
             Real CVE correlation. AI-powered analysis. Your network&apos;s threat surface, decoded in seconds.
           </p>
           <div className="hero-actions">
-            <Link href="/login" className="btn-primary">
+            <Link href="/dashboard" className="btn-primary">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
                 <path d="M13 5l7 7-7 7M5 12h15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Start Scanning
+              Launch Demo Dashboard
             </Link>
             <a href="#how-it-works" className="btn-secondary">See How It Works</a>
           </div>
@@ -259,14 +259,32 @@ export default function Home() {
           <span className="green-stroke">attack surface.</span>
         </h2>
         <p className="cta-sub">Scan your network. Get real CVEs. Understand your risk in plain English.</p>
-        <div className="hero-actions" style={{ opacity: 1, animation: 'none' }}>
-          <Link href="/login" className="btn-primary">
+        <div className="hero-actions" style={{ opacity: 1, animation: 'none', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Link href="/dashboard" className="btn-primary">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
               <path d="M13 5l7 7-7 7M5 12h15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Launch Scanner
+            Launch Demo Dashboard
           </Link>
+          <a
+            href="https://github.com/Kalpesh-ops/aegir"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary"
+          >
+            View on GitHub
+          </a>
         </div>
+        <p style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '11px',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'rgba(0,255,136,0.7)',
+          marginTop: '28px',
+        }}>
+          ● Desktop app · CLI · packaged installers — coming soon
+        </p>
       </section>
 
       <Footer />
