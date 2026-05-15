@@ -39,7 +39,7 @@ The application is built on a **decoupled full-stack architecture** with an asyn
 
 ```mermaid
 graph TB
-    subgraph "Frontend — Next.js 16 (Vercel)"
+    subgraph "Frontend — Next.js 16 (Electron Desktop Shell)"
         A["Landing Page"] --> B["Supabase Auth (Login)"]
         B --> C["Dashboard SPA"]
         C --> C1["Scanner"]
@@ -236,9 +236,15 @@ aegir/
 ├── 📄 server.py                         # FastAPI entry (routes, middleware, worker bootstrap)
 ├── 📄 requirements.txt                  # Python dependencies
 ├── 📄 .env.example                      # Backend env template
+├── 📄 package.json                      # Electron + dev-orchestrator scripts
+├── 📄 electron-builder.yml              # Packaged-installer config (NSIS / DMG / AppImage)
 │
-├── 📁 config/                           # Configuration
-│   └── settings.py                      # Application constants
+├── 📁 electron/                         # 🖥️ Desktop Shell
+│   ├── main.js                          # Electron main process (window, CSP, IPC)
+│   ├── preload.js                       # Sandboxed bridge to renderer
+│   ├── backend-supervisor.js            # Spawns + monitors Python backend
+│   ├── frontend-supervisor.js           # Spawns + monitors Next.js (dev/prod)
+│   └── auto-updater.js                  # GitHub Releases auto-update hook
 │
 ├── 📁 src/                              # Core Backend Source
 │   │
@@ -256,8 +262,7 @@ aegir/
 │   ├── 📁 scanner/                      # 🔍 Network Scanning Engines
 │   │   ├── nmap_engine.py               # Nmap: port scan, service detection, XML parsing
 │   │   ├── scapy_engine.py              # Scapy: ACK packet firewall detection
-│   │   ├── tshark_engine.py             # TShark: header-only packet capture + summary
-│   │   └── tshark_capture.py            # Legacy TShark module
+│   │   └── tshark_engine.py             # TShark: header-only packet capture + summary
 │   │
 │   ├── 📁 vuln_lookup/                  # 🛡️ CVE Intelligence
 │   │   ├── circl_client.py              # CIRCL API: CVE lookup, 7-day SQLite cache, DNS fallback
@@ -268,20 +273,44 @@ aegir/
 │   │   ├── prompts.py                   # System prompt: structured output format
 │   │   └── report_generator.py          # Report assembly
 │   │
+│   ├── 📁 dependencies/                 # 📦 Native-Dependency Installer Wizard
+│   │   ├── detector.py                  # Detect Nmap / Npcap / TShark on PATH
+│   │   ├── registry.py                  # Per-OS install plans + license metadata
+│   │   └── installer.py                 # Privileged installer runner (winget / apt / brew)
+│   │
 │   └── 📁 utils/                        # 🔧 Utilities
 │       ├── data_sanitizer.py            # PII redaction: MACs, IPs, emails, credentials
 │       ├── token_optimizer.py           # AI token pruning: strip noise, keep signal
-│       └── validators.py               # IP/CIDR validation: private-only enforcement
+│       ├── validators.py                # IP/CIDR validation: private-only enforcement
+│       ├── secrets.py                   # Fernet encryption-at-rest for per-user API keys
+│       ├── log_scrubber.py              # Last-octet IP redaction in log lines
+│       └── sqlite_helpers.py            # Shared SQLite connection / WAL helpers
 │
 ├── 📁 data/                             # Local databases (gitignored)
 │   ├── jobs.db                          # Job queue state
 │   ├── cve_cache.db                     # CIRCL CVE cache (7-day TTL)
 │   └── ai_cache.db                      # Local AI report cache
 │
+├── 📁 supabase/                         # Supabase Schema & Policies
+│   └── policies.sql                     # Row-Level-Security policies for scans / consent
+│
+├── 📁 docs/                             # Architecture & Operations Docs
+│   └── architecture/                    # Electron 3-process model, security posture
+│
+├── 📁 tests/                            # Pytest Suite (62 tests at last run)
+│   ├── test_body_size_middleware.py     # Request-size limit middleware
+│   ├── test_dependencies_*.py           # Detector / installer / registry
+│   ├── test_gemini_signature.py         # Cache-signature stability
+│   ├── test_log_scrubber.py             # Last-octet redaction
+│   ├── test_nmap_parser.py              # XML → port-list parser
+│   ├── test_sanitizer.py                # PII redaction
+│   ├── test_secrets.py                  # Fernet round-trip
+│   ├── test_sqlite_helpers.py           # WAL / busy-timeout behaviour
+│   └── test_validators.py               # IP / CIDR validation
+│
 └── 📁 frontend/                         # Next.js 16 Frontend
     ├── 📄 package.json                  # Dependencies (React 19, Next 16, Supabase SSR)
     ├── 📄 next.config.js                # API rewrites, security headers
-    ├── 📄 middleware.js                 # Supabase session → route guards
     ├── 📄 .env.example                  # Frontend env template
     │
     ├── 📁 app/                          # Next.js App Router
@@ -290,7 +319,7 @@ aegir/
     │   ├── page.jsx                     # Landing page (hero, features, privacy, CTA)
     │   │
     │   ├── 📁 login/                    # Auth
-    │   │   └── page.jsx                 # Supabase email/password + OAuth login
+    │   │   └── page.jsx                 # Supabase email/password login
     │   │
     │   └── 📁 dashboard/                # Protected routes (auth-gated)
     │       ├── layout.jsx               # Sidebar layout + server-side auth check
@@ -304,8 +333,16 @@ aegir/
     │       │   ├── page.jsx             # Past scans + Supabase actions
     │       │   └── actions.js           # Server actions (delete history)
     │       │
+    │       ├── 📁 setup/                # Native-Dependency Installer Wizard
+    │       │   └── page.jsx             # Detection, license consent, install progress
+    │       │
     │       └── 📁 settings/             # User Settings
-    │           └── page.jsx             # Consent management, account
+    │           ├── page.jsx             # Consent management, API key, account
+    │           └── 📁 docs/             # Legal documents
+    │               ├── consent-policy/  # Consent policy (versioned)
+    │               ├── disclaimer/      # Security / scope disclaimer
+    │               ├── privacy-policy/  # Privacy policy
+    │               └── terms-of-service/ # Terms of service
     │
     ├── 📁 components/                   # Shared Components
     │   ├── DashboardClient.jsx          # Dashboard overview widget
@@ -441,10 +478,19 @@ for development use**.
 | `GET` | `/api/scan/:id` | JWT | Poll scan job status/result |
 | `GET` | `/api/scans` | JWT | List user's last 10 scans |
 | `DELETE` | `/api/scans` | JWT | Clear user's local scan history |
+| `DELETE` | `/api/account` | JWT | Delete account + purge scan history |
 | `GET` | `/api/consent` | JWT | Check user consent status |
 | `POST` | `/api/consent` | JWT | Grant consent for advanced scans |
 | `DELETE` | `/api/consent` | JWT | Revoke consent |
 | `POST` | `/api/analyze` | — | Direct AI analysis (rate-limited) |
+| `POST` | `/api/settings/apikey` | JWT | Set per-user Gemini API key (Fernet-encrypted at rest) |
+| `GET` | `/api/setup/detect` | JWT | Detect installed native scan tools (Nmap / Npcap / TShark) |
+| `POST` | `/api/setup/license` | JWT | Record acceptance of bundled-tool licenses |
+| `POST` | `/api/setup/install` | JWT | Queue a native-dependency install job |
+| `GET` | `/api/setup/install/:job_id` | JWT | Poll install-job status |
+| `POST` | `/api/setup/install/:job_id/cancel` | JWT | Cancel a running install job |
+| `GET` | `/api/setup/jobs` | JWT | List recent install jobs |
+| `GET` | `/api/status` | JWT | Authenticated version probe (app version, scan-mode availability) |
 | `GET` | `/health` | — | Health check |
 
 > Interactive API docs available at `http://localhost:8000/docs` (Swagger UI)
@@ -502,62 +548,82 @@ curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
 | Package | Version | Purpose |
 |---|---|---|
 | `fastapi` | 0.128.0 | Async REST API framework |
-| `uvicorn` | 0.40.0 | ASGI server |
-| `google-generativeai` | 0.8.5 | Gemini 2.5 Flash SDK |
-| `supabase` | 2.28.2 | Supabase Python client (auth, DB) |
+| `uvicorn` | 0.46.0 | ASGI server |
+| `google-generativeai` | 0.8.6 | Gemini 2.5 Flash SDK |
+| `supabase` | 2.29.0 | Supabase Python client (auth, DB) |
 | `scapy` | 2.7.0 | Packet crafting & firewall detection |
 | `python-jose` | 3.5.0 | JWT token verification |
-| `python-dotenv` | 1.0.0 | Environment variable management |
-| `requests` | 2.31.0 | HTTP client (CIRCL API) |
+| `pyjwt` | ≥2.12.1 | JWT decoding for Supabase middleware |
+| `cryptography` | ≥47.0.0 | Fernet encryption-at-rest for per-user keys |
+| `python-dotenv` | ≥1.2.2 | Environment variable management |
+| `requests` | ≥2.33.1 | HTTP client (CIRCL API) |
+| `slowapi` | 0.1.9 | Per-endpoint rate limiting |
+| `defusedxml` | ≥0.7.1 | Hardened Nmap XML parser |
+| `psutil` | ≥5.9.0 | Process management for backend supervisor |
+| `python-nmap` | ≥0.7.1 | Nmap wrapper |
 
 ### Frontend
 | Package | Version | Purpose |
 |---|---|---|
-| `next` | 16.2.1 | React framework (App Router + Turbopack) |
-| `react` | 19.2.4 | UI library |
-| `@supabase/ssr` | 0.9.0 | Server-side Supabase auth |
-| `@supabase/supabase-js` | 2.99.3 | Supabase client SDK |
-| `recharts` | 3.8.0 | Severity distribution charts |
-| `framer-motion` | 12.29.2 | UI animations |
+| `next` | 16.2.4 | React framework (App Router + Turbopack) |
+| `react` | 19.2.5 | UI library |
+| `@supabase/ssr` | ^0.9.0 | Server-side Supabase auth |
+| `@supabase/supabase-js` | 2.105.1 | Supabase client SDK |
+| `recharts` | 3.8.1 | Severity distribution charts |
+| `framer-motion` | 12.38.0 | UI animations |
 | `@react-three/fiber` | 9.5.0 | 3D particle background |
+| `@react-three/drei` | 10.7.7 | Three.js helpers |
 | `lucide-react` | 0.563.0 | Icon library |
 | `react-markdown` | 10.1.0 | AI report rendering |
-| `dompurify` | 3.3.3 | XSS sanitization |
+| `rehype-sanitize` | 6.0.0 | Markdown HTML sanitization |
+| `dompurify` | 3.4.1 | XSS sanitization |
 
-### Cloud & Infrastructure
+### Desktop Shell
+| Package | Version | Purpose |
+|---|---|---|
+| `electron` | 33.4.1 | Desktop runtime (Windows / macOS / Linux) |
+| `electron-builder` | 25.1.8 | NSIS / DMG / AppImage packaging |
+| `electron-updater` | 6.3.9 | GitHub-Releases auto-update channel |
+| `electron-log` | 5.2.3 | File-rotated logging for the main process |
+| `concurrently` | 9.1.2 | Dev orchestrator (backend + frontend + electron) |
+| `wait-on` | 8.0.5 | Block Electron until Next is ready |
+
+### External Services
 | Service | Purpose |
 |---|---|
-| **Google Gemini 2.5 Flash** | AI threat analysis engine |
+| **Google Gemini 2.5 Flash** | AI threat analysis engine (bring-your-own-key) |
 | **Supabase (PostgreSQL)** | Auth, scan history, global AI cache, consent |
 | **CIRCL CVE Database** | Public CVE lookup API (247K+ entries) |
-| **Vercel** | Frontend hosting (Edge CDN + SSR) |
 
 ---
 
-## 🌐 Production Deployment
+## 📦 Distribution & Deployment
 
-### Live Application
-**Frontend:** [https://aegir.vercel.app](https://aegir.vercel.app)
+### Local-First Desktop Application
 
-### Deployment Architecture
+Aegir is designed to run **on the user's own machine**. The reference distribution is the Electron desktop shell (`npm run dev` for development, `npm run electron:build:{win,mac,linux}` for packaged installers) — there is no hosted public scanner endpoint. This is intentional: the product runs scans against the operator's own private network, so the user always controls the execution boundary.
 
-| Layer | Platform | Details |
+| Layer | Where it runs | Notes |
 |---|---|---|
-| **Frontend** | Vercel | Next.js SSR, Edge CDN, auto HTTPS |
-| **Backend** | Self-hosted | Ubuntu + Nginx reverse proxy, Let's Encrypt SSL |
-| **Database** | Supabase | Managed PostgreSQL with Row-Level Security |
-| **DNS** | `.nip.io` wildcard | SSL certificate validation for IP-based domains |
+| **Electron shell** | User machine | Single-window desktop UX wrapping Next + FastAPI |
+| **FastAPI backend** | User machine (localhost:8000) | Spawned and supervised by Electron |
+| **Next.js frontend** | User machine (localhost:3000) | Spawned and supervised by Electron |
+| **Supabase** | Managed (`*.supabase.co`) | Auth + scan-history persistence; RLS-enforced |
+| **Gemini API** | Managed (Google) | Reached only after PII redaction; user provides their own key |
+| **CIRCL API** | Public (`cve.circl.lu`) | Read-only CVE lookups; results cached locally for 7 days |
 
-### Security Hardening
-- **End-to-End Encryption**: All traffic over HTTPS (HSTS enabled)
-- **CORS Whitelist**: Only production frontend origin allowed
-- **Security Headers**: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, HSTS (via both Next.js and FastAPI middleware)
-- **Rate Limiting**: 5 scans/hour, 60 status polls/min, 10 analyses/min per IP
-- **Trusted Host Middleware**: Request validation against allowed hostnames
-- **Input Validation**: Strict regex for IPs, CIDR ranges, and scan parameters
-- **No Secrets in Code**: All credentials via environment variables, never committed
-
-> **Security Note:** The production backend URL is intentionally not published in documentation to prevent unauthorized access and abuse of scanning capabilities.
+### Security Hardening (applied to local-host backend)
+- **JWT Auth on every mutating endpoint** — Supabase RS256/HS256 verification, no token-bypass paths
+- **Target-IP allowlist** — `validators.py` only accepts loopback + RFC1918 private ranges
+- **Fernet encryption-at-rest** for per-user Gemini API keys (`src/utils/secrets.py`)
+- **CORS lockdown** — only localhost origins by default; extra origins must be opted-in via `EXTRA_CORS_ORIGINS`
+- **TrustedHost middleware** — bound to `ALLOWED_HOSTS` (defaults to loopback only)
+- **Body-size limit** — 256 KiB default JSON-body cap (configurable)
+- **Last-octet IP redaction in logs** (`src/utils/log_scrubber.py`)
+- **Hardened XML parser** — `defusedxml` for Nmap output (XXE-safe)
+- **Rate limiting** — `slowapi`: 5 scans/hour, 60 polls/min, 10 analyses/min per IP
+- **Static analysis in CI** — Bandit, pip-audit, Ruff
+- **No secrets in code** — all credentials via `.env` / `frontend/.env.local`, never committed
 
 ---
 
