@@ -1,40 +1,29 @@
 {
-  "name": "aegir",
-  "productName": "Aegir",
-  "version": "2.1.0",
-  "description": "Local-first network security scanner with AI-generated remediation.",
-  "author": {
-    "name": "Kalpesh",
-    "email": "welldonejason111@gmail.com"
-  },
-  "license": "Apache-2.0",
-  "homepage": "https://aegir.live",
-  "main": "electron/main.js",
+  "name": "aegir-showcase",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Public, no-backend showcase site for the Aegir network security intelligence platform.",
   "scripts": {
-    "electron:dev": "cross-env NETSEC_ELECTRON_DEV=1 electron .",
-    "electron:start": "electron .",
-    "electron:build": "electron-builder --config electron-builder.yml",
-    "electron:build:win": "electron-builder --config electron-builder.yml --win",
-    "electron:build:mac": "electron-builder --config electron-builder.yml --mac",
-    "electron:build:linux": "electron-builder --config electron-builder.yml --linux",
-    "frontend:dev": "npm --prefix frontend run dev",
-    "frontend:build": "npm --prefix frontend run build",
-    "dev": "concurrently -n backend,frontend,electron -c blue,green,magenta \"npm:backend:dev\" \"npm:frontend:dev\" \"wait-on http://127.0.0.1:3000 && npm run electron:dev\"",
-    "backend:dev": "python server.py"
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "electron-log": "5.2.3",
-    "electron-updater": "6.3.9"
+    "next": "16.2.4",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-markdown": "10.1.0",
+    "recharts": "3.8.1",
+    "rehype-sanitize": "6.0.0"
   },
   "devDependencies": {
-    "concurrently": "9.1.2",
-    "cross-env": "7.0.3",
-    "electron": "33.4.1",
-    "electron-builder": "25.1.8",
-    "wait-on": "8.0.5"
-  },
-  "engines": {
-    "node": ">=20"
+    "@eslint/js": "9.39.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.2",
+    "eslint-plugin-react-hooks": "7.0.1",
+    "globals": "16.5.0"
   }
 }

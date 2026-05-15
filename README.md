@@ -1,644 +1,112 @@
-# 🛡️ Aegir
+# Aegir — Showcase Site
 
-> *Automated Network Vulnerability Scanning & AI-Powered Threat Intelligence*
+This branch (`live-demo-site`) is the **public, no-backend showcase** of the
+Aegir network security intelligence platform. It is a fully static Next.js
+app: no API calls, no authentication, no database. Every scan, CVE record
+and AI summary you see is rendered from baked-in demo data.
 
-![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)
-![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js)
-![Python](https://img.shields.io/badge/Python-3.12%2B-blue?style=for-the-badge&logo=python)
-
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi)
-![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=for-the-badge&logo=next.js)
-![Supabase](https://img.shields.io/badge/Supabase-3fcf8e?style=for-the-badge&logo=supabase)
-![Gemini](https://img.shields.io/badge/Gemini%202.5%20Flash-8E75B2?style=for-the-badge&logo=google)
-
----
-
-## 🚩 Problem Statement
-
-Network security tools generate high-fidelity data, but the output is often too cryptic for non-experts to act on quickly. Critical services remain exposed because remediation guidance is unclear or buried in raw logs.
+The actual product — local-first scanning, packet capture, CVE correlation
+and Gemini-powered remediation reports — runs inside the **Aegir desktop
+application** (Electron), which is **coming soon**. The full source tree
+for the desktop app and CLI lives on the [`main`](https://github.com/Kalpesh-ops/aegir/tree/main)
+branch.
 
 ---
 
-## 💡 The Solution
+## Stack
 
-**Aegir** turns raw network telemetry into clear, actionable security guidance:
-
-1.  **Scans** the network using industry-standard engines (Nmap, Scapy & TShark).
-2.  **Correlates** discovered services against **247K+ real CVEs** from the CIRCL vulnerability database — pure determinism, no AI at this stage.
-3.  **Analyzes** findings using **Google Gemini 2.5 Flash** to produce plain-English remediation reports.
-4.  **Protects** user privacy at every stage — PII is stripped before any data leaves the server.
-
-It turns *"Port 445 Open (Microsoft-DS)"* into *"High Risk: Your file sharing service is exposed. Block it using this firewall command..."*
-
----
-
-## ⚙️ System Architecture
-
-The application is built on a **decoupled full-stack architecture** with an async job queue, Supabase authentication, and a 3-tier AI caching layer.
-
-```mermaid
-graph TB
-    subgraph "Frontend — Next.js 16 (Electron Desktop Shell)"
-        A["Landing Page"] --> B["Supabase Auth (Login)"]
-        B --> C["Dashboard SPA"]
-        C --> C1["Scanner"]
-        C --> C2["Scan History"]
-        C --> C3["Settings"]
-    end
-
-    subgraph "Backend — FastAPI"
-        D["API Gateway<br/>Rate Limiting + JWT Auth"]
-        D --> E["Job Queue<br/>(SQLite)"]
-        E --> F["Background Worker"]
-
-        subgraph "Scan Pipeline"
-            F --> G["Nmap Engine"]
-            F --> H["Scapy Engine"]
-            F --> I["TShark Engine"]
-        end
-
-        subgraph "CVE Intelligence"
-            F --> J["CIRCL Client<br/>(247K+ CVEs)"]
-            J --> K["VulnChecker<br/>(Script + API CVEs)"]
-        end
-
-        subgraph "Privacy Layer"
-            F --> L["Data Sanitizer<br/>(PII Redaction)"]
-        end
-
-        subgraph "AI Analysis"
-            L --> M["Gemini Client<br/>(3-Tier Cache)"]
-        end
-    end
-
-    subgraph "Data Layer"
-        N["Supabase (PostgreSQL)<br/>Scan History + Consent + Global AI Cache"]
-        O["SQLite (Local)<br/>Job Queue + CVE Cache + Local AI Cache"]
-    end
-
-    C1 -- "POST /api/scan<br/>(JWT)" --> D
-    C2 -- "GET /api/scans<br/>(JWT)" --> D
-    M --> N
-    F --> N
-    E --> O
-    J --> O
-    M --> O
-```
-
-### Backend Stack (FastAPI + Uvicorn)
-
-| Component | Technology | Purpose |
-|---|---|---|
-| **Server** | FastAPI + Uvicorn ASGI | Async REST API with automatic OpenAPI docs |
-| **Auth** | Supabase JWT (ES256) | Stateless token verification via JWKS endpoint |
-| **Job Queue** | SQLite-backed FIFO | Async scan queuing with background worker thread |
-| **Scanning** | Nmap, Scapy, TShark | Port scanning, firewall detection, packet capture |
-| **CVE Database** | CIRCL API + SQLite cache | Deterministic vulnerability correlation (7-day TTL) |
-| **AI Engine** | Google Gemini 2.5 Flash | Threat analysis with 3-tier caching (Local → Global → API) |
-| **Privacy** | Custom PII Sanitizer | Regex-based redaction of MACs, IPs, emails, credentials |
-
-### Frontend Stack (Next.js 16 + React 19)
-
-| Component | Technology | Purpose |
-|---|---|---|
-| **Framework** | Next.js 16 (Turbopack) | Server components, middleware auth, API rewrites |
-| **UI Library** | React 19.2 | Modern hooks, client components |
-| **Auth** | Supabase SSR | Cookie-based session management with middleware guards |
-| **Visualization** | Recharts, React Three Fiber | Severity charts, 3D particle background |
-| **Styling** | Vanilla CSS | Custom cyberpunk design system (Syne + JetBrains Mono) |
-| **Animation** | Framer Motion | Page transitions, micro-interactions |
-| **Security** | DOMPurify | XSS sanitization for AI-generated markdown |
-
----
-
-## 🔄 Process Flow — Scan Pipeline
-
-The following flowchart details what happens from the moment a user clicks "Scan" to receiving their threat report.
-
-```mermaid
-flowchart TD
-    A["👤 User submits target IP"] --> B{"Input Validation<br/>(Private IP only)"}
-    B -- Invalid --> B1["❌ 400 Rejection"]
-    B -- Valid --> C["Rate Limit Check<br/>(5 scans/hour/IP)"]
-    C -- Exceeded --> C1["❌ 429 Too Many Requests"]
-    C -- OK --> D["Create Job<br/>(SQLite queue, status: queued)"]
-    D --> E["Return job_id to client"]
-    E --> F["Frontend polls<br/>GET /api/scan/:id"]
-
-    D --> G["🔄 Background Worker<br/>picks up job"]
-    G --> H{"Scan Mode?"}
-
-    H -- fast --> I["Nmap<br/>-sT -F -sV"]
-    H -- deep --> J["Nmap<br/>-sT -sV --script=default"]
-    H -- pen_test --> K["Nmap<br/>-sT -sV -p- (all ports)"]
-
-    I --> L["Parse XML → Port List"]
-    J --> L
-    K --> L
-
-    J --> M["Scapy ACK Probe<br/>(Firewall Detection)"]
-    K --> M
-    K --> N["TShark Capture<br/>(30s, headers-only)"]
-
-    L --> O["CIRCL CVE Lookup<br/>(per service/product)"]
-    O --> P["VulnChecker<br/>(Nmap scripts + CIRCL merge)"]
-
-    P --> Q["🔒 PII Redaction<br/>(data_sanitizer.py)"]
-    Q --> R{"AI Cache Check"}
-    R -- "1. Local SQLite" --> S["✅ Return cached report"]
-    R -- "2. Global Supabase" --> S
-    R -- "3. Cache miss" --> T["🤖 Gemini 2.5 Flash<br/>Analysis"]
-    T --> U["Cache to Local + Global"]
-    U --> S
-
-    S --> V["Store to Supabase<br/>(scans table)"]
-    V --> W["Mark job complete"]
-    W --> F
-    F --> X["📊 Dashboard renders<br/>ports, CVEs, AI report"]
-
-    style Q fill:#1a3a1a,stroke:#00ff88,color:#00ff88
-    style T fill:#2a1a3a,stroke:#8E75B2,color:#fff
-```
-
-### Scan Modes
-
-| Mode | Nmap Flags | Scapy | TShark | CVE Source | Est. Time |
-|---|---|---|---|---|---|
-| **Fast** | `-Pn -sT -F -sV` | ❌ | ❌ | CIRCL API | ~38s |
-| **Deep** | `-Pn -sT -sV --script=default` | ✅ Port 80 | ❌ | VulnChecker + CIRCL | ~105s |
-| **Pen Test** | `-Pn -sT -sV -p-` (all ports) | ✅ Port 445 | ✅ 30s capture | VulnChecker + CIRCL | ~225s |
-
----
-
-## 🔒 Privacy Architecture
-
-Privacy is not a feature — it is embedded into the system architecture. Data is sanitized at multiple layers before it ever reaches an external service.
-
-```mermaid
-flowchart LR
-    subgraph "Your Network"
-        A["Raw Scan Data<br/>IPs, MACs, Hostnames"]
-    end
-
-    subgraph "Privacy Firewall"
-        B["data_sanitizer.py"]
-        B1["Strip MAC addresses"]
-        B2["Mask private IPs → X.X.X.XXX"]
-        B3["Redact emails"]
-        B4["Remove credentials"]
-        B5["Redact hostnames"]
-        B --> B1 & B2 & B3 & B4 & B5
-    end
-
-    subgraph "External Services"
-        C["Google Gemini API<br/>(sees ONLY threat signatures)"]
-        D["Supabase DB<br/>(redacted target stored)"]
-    end
-
-    A --> B
-    B5 --> C
-    B5 --> D
-
-    style B fill:#1a3a1a,stroke:#00ff88,color:#00ff88
-```
-
-### Privacy Guarantees
-
-| Layer | Protection | Implementation |
-|---|---|---|
-| **Input Validation** | Only private/loopback IPs accepted | `validators.py` rejects public IPs, validates CIDR ranges |
-| **PII Redaction** | MACs, IPs, emails, passwords stripped | `data_sanitizer.py` — recursive regex across all nested data |
-| **Token Optimization** | Only essential port/service data sent to AI | `token_optimizer.py` removes noise, keeps actionable fields |
-| **AI Context** | Gemini sees threat signatures, not topology | `redact_enriched_scan()` runs before any Gemini call |
-| **Consent Management** | GDPR-style explicit consent for advanced scans | `consent_manager.py` — versioned policy, revocable consent |
-| **TShark Privacy** | Only packet headers captured (80 bytes) | `-s 80` flag — payload data never captured |
-| **AI Cache Privacy** | Cache keys are SHA-256 hashes of vulnerability profiles | No IPs or user data in cache signatures |
-
-### What The AI Sees vs. What It Doesn't
-
-| ✅ AI Receives | ❌ AI Never Receives |
+| Layer | Tool |
 |---|---|
-| Port numbers (22, 80, 443...) | IP addresses |
-| Service names (ssh, http...) | Hostnames |
-| Product/version (Apache 2.4.49) | MAC addresses |
-| CVE IDs + CVSS scores | Email addresses |
-| Threat severity classification | Passwords/credentials |
-| Protocol metadata | Network topology |
+| Framework | Next.js 16 (App Router) |
+| Runtime | React 19 |
+| Language | JavaScript (JSX) |
+| Output | Static export (`output: 'export'`) |
+| Hosting | Any static host (Vercel · Cloudflare Pages · Netlify · S3 · GitHub Pages) |
+| Charts | Recharts |
+| Markdown | react-markdown + rehype-sanitize |
+
+No backend services are configured or required.
 
 ---
 
-## 📂 Directory Structure
+## Local development
 
-```
-aegir/
-│
-├── 📄 server.py                         # FastAPI entry (routes, middleware, worker bootstrap)
-├── 📄 requirements.txt                  # Python dependencies
-├── 📄 .env.example                      # Backend env template
-├── 📄 package.json                      # Electron + dev-orchestrator scripts
-├── 📄 electron-builder.yml              # Packaged-installer config (NSIS / DMG / AppImage)
-│
-├── 📁 electron/                         # 🖥️ Desktop Shell
-│   ├── main.js                          # Electron main process (window, CSP, IPC)
-│   ├── preload.js                       # Sandboxed bridge to renderer
-│   ├── backend-supervisor.js            # Spawns + monitors Python backend
-│   ├── frontend-supervisor.js           # Spawns + monitors Next.js (dev/prod)
-│   └── auto-updater.js                  # GitHub Releases auto-update hook
-│
-├── 📁 src/                              # Core Backend Source
-│   │
-│   ├── 📁 auth/                         # 🔐 Authentication
-│   │   └── middleware.py                # Supabase JWT verification (ES256 JWKS)
-│   │
-│   ├── 📁 database/                     # 💾 Data Persistence
-│   │   ├── supabase_client.py           # Supabase SDK: scan storage + global AI cache
-│   │   └── consent_manager.py           # GDPR-style consent: grant, check, revoke
-│   │
-│   ├── 📁 queue/                        # ⚡ Async Job Queue
-│   │   ├── job_manager.py               # SQLite FIFO: create, poll, complete, fail
-│   │   └── worker.py                    # Background thread: scan pipeline orchestrator
-│   │
-│   ├── 📁 scanner/                      # 🔍 Network Scanning Engines
-│   │   ├── nmap_engine.py               # Nmap: port scan, service detection, XML parsing
-│   │   ├── scapy_engine.py              # Scapy: ACK packet firewall detection
-│   │   └── tshark_engine.py             # TShark: header-only packet capture + summary
-│   │
-│   ├── 📁 vuln_lookup/                  # 🛡️ CVE Intelligence
-│   │   ├── circl_client.py              # CIRCL API: CVE lookup, 7-day SQLite cache, DNS fallback
-│   │   └── vuln_checker.py              # Dual-phase CVE: Nmap scripts + CIRCL API
-│   │
-│   ├── 📁 ai_agent/                     # 🤖 AI Analysis Engine
-│   │   ├── gemini_client.py             # Gemini 2.5: 3-tier cache, model fallback chain
-│   │   ├── prompts.py                   # System prompt: structured output format
-│   │   └── report_generator.py          # Report assembly
-│   │
-│   ├── 📁 dependencies/                 # 📦 Native-Dependency Installer Wizard
-│   │   ├── detector.py                  # Detect Nmap / Npcap / TShark on PATH
-│   │   ├── registry.py                  # Per-OS install plans + license metadata
-│   │   └── installer.py                 # Privileged installer runner (winget / apt / brew)
-│   │
-│   └── 📁 utils/                        # 🔧 Utilities
-│       ├── data_sanitizer.py            # PII redaction: MACs, IPs, emails, credentials
-│       ├── token_optimizer.py           # AI token pruning: strip noise, keep signal
-│       ├── validators.py                # IP/CIDR validation: private-only enforcement
-│       ├── secrets.py                   # Fernet encryption-at-rest for per-user API keys
-│       ├── log_scrubber.py              # Last-octet IP redaction in log lines
-│       └── sqlite_helpers.py            # Shared SQLite connection / WAL helpers
-│
-├── 📁 data/                             # Local databases (gitignored)
-│   ├── jobs.db                          # Job queue state
-│   ├── cve_cache.db                     # CIRCL CVE cache (7-day TTL)
-│   └── ai_cache.db                      # Local AI report cache
-│
-├── 📁 supabase/                         # Supabase Schema & Policies
-│   └── policies.sql                     # Row-Level-Security policies for scans / consent
-│
-├── 📁 docs/                             # Architecture & Operations Docs
-│   └── architecture/                    # Electron 3-process model, security posture
-│
-├── 📁 tests/                            # Pytest Suite (62 tests at last run)
-│   ├── test_body_size_middleware.py     # Request-size limit middleware
-│   ├── test_dependencies_*.py           # Detector / installer / registry
-│   ├── test_gemini_signature.py         # Cache-signature stability
-│   ├── test_log_scrubber.py             # Last-octet redaction
-│   ├── test_nmap_parser.py              # XML → port-list parser
-│   ├── test_sanitizer.py                # PII redaction
-│   ├── test_secrets.py                  # Fernet round-trip
-│   ├── test_sqlite_helpers.py           # WAL / busy-timeout behaviour
-│   └── test_validators.py               # IP / CIDR validation
-│
-└── 📁 frontend/                         # Next.js 16 Frontend
-    ├── 📄 package.json                  # Dependencies (React 19, Next 16, Supabase SSR)
-    ├── 📄 next.config.js                # API rewrites, security headers
-    ├── 📄 .env.example                  # Frontend env template
-    │
-    ├── 📁 app/                          # Next.js App Router
-    │   ├── layout.jsx                   # Root layout (Syne + JetBrains Mono fonts)
-    │   ├── globals.css                  # Global styles + cyberpunk design system
-    │   ├── page.jsx                     # Landing page (hero, features, privacy, CTA)
-    │   │
-    │   ├── 📁 login/                    # Auth
-    │   │   └── page.jsx                 # Supabase email/password login
-    │   │
-    │   └── 📁 dashboard/                # Protected routes (auth-gated)
-    │       ├── layout.jsx               # Sidebar layout + server-side auth check
-    │       ├── page.jsx                 # Overview: recent scans, severity charts
-    │       │
-    │       ├── 📁 scan/                 # Scanner
-    │       │   ├── page.jsx             # Scan form + real-time result viewer
-    │       │   └── 📁 [id]/             # Dynamic scan result page
-    │       │
-    │       ├── 📁 history/              # Scan History
-    │       │   ├── page.jsx             # Past scans + Supabase actions
-    │       │   └── actions.js           # Server actions (delete history)
-    │       │
-    │       ├── 📁 setup/                # Native-Dependency Installer Wizard
-    │       │   └── page.jsx             # Detection, license consent, install progress
-    │       │
-    │       └── 📁 settings/             # User Settings
-    │           ├── page.jsx             # Consent management, API key, account
-    │           └── 📁 docs/             # Legal documents
-    │               ├── consent-policy/  # Consent policy (versioned)
-    │               ├── disclaimer/      # Security / scope disclaimer
-    │               ├── privacy-policy/  # Privacy policy
-    │               └── terms-of-service/ # Terms of service
-    │
-    ├── 📁 components/                   # Shared Components
-    │   ├── DashboardClient.jsx          # Dashboard overview widget
-    │   ├── ScanResultClient.jsx         # Full scan result renderer (ports, CVEs, AI)
-    │   ├── HistoryClient.jsx            # Scan history table
-    │   ├── SidebarNav.jsx               # Dashboard sidebar navigation
-    │   ├── SidebarFooter.jsx            # Sidebar user info + logout
-    │   ├── Navbar.jsx                   # Landing page navbar
-    │   ├── Footer.jsx                   # Landing page footer
-    │   └── ParticleBackground.jsx       # Three.js 3D particle field
-    │
-    ├── 📁 hooks/                        # Custom React Hooks
-    │   └── useScrollAnimation.js        # Scroll-triggered reveal animations
-    │
-    └── 📁 lib/                          # Utilities
-        └── localCache.js               # In-memory scan cache (15s TTL)
-```
-
-### Notes on Directory Structure
-
-- ✅ **Committed**: All source code, config templates (`.env.example`), documentation
-- ❌ **Gitignored**: `node_modules/`, `__pycache__/`, `.venv/`, `data/`, `logs/`, `.env`, `.next/`
-- 🔐 **Secrets**: API keys, Supabase credentials, and backend URLs are never committed
-- 🗄️ **Local DBs**: `data/*.db` files are auto-created at runtime, never committed
-
----
-
-## 💻 Local Development Setup
-
-### Prerequisites
-
-| Dependency | Version | Notes |
-|---|---|---|
-| **Python** | 3.12+ | Tested with 3.12.6 |
-| **Node.js** | 20+ | Required for Next.js 16 |
-| **Nmap** | Latest | Must be on PATH. [Download](https://nmap.org/download.html) |
-| **Npcap** (Windows) | Latest | Required for Scapy. Bundled with Nmap installer |
-| **Google API Key** | — | [Get one from AI Studio](https://aistudio.google.com/app/apikey) |
-| **Supabase Project** | — | [Create at supabase.com](https://supabase.com) |
-
-> **Optional**: Scapy (firewall detection) and TShark (packet capture) require elevated privileges. The system gracefully degrades if they are unavailable.
-
-### Installation
-
-#### 1. Clone the Repository
 ```bash
-git clone https://github.com/Kalpesh-ops/aegir.git
-cd aegir
-```
-
-#### 2. Backend Setup
-```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate (Windows)
-.\.venv\Scripts\Activate.ps1
-
-# Activate (macOS/Linux)
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-#### 3. Configure Environment Variables
-
-**Backend** — copy `.env.example` → `.env` (project root):
-```env
-GOOGLE_API_KEY=your_gemini_api_key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-ALLOWED_HOSTS=localhost,127.0.0.1
-```
-
-**Frontend** — copy `frontend/.env.example` → `frontend/.env.local`:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-#### 4. Frontend Setup
-```bash
-cd frontend
 npm install
-```
-
-### Running the Application
-
-#### Start Backend (API + Worker)
-```bash
-python server.py
-```
-This starts:
-- **FastAPI server** on `http://127.0.0.1:8000`
-- **Background worker thread** that processes queued scan jobs
-
-#### Start Frontend
-```bash
-cd frontend
-npm run dev
-```
-Frontend available at `http://localhost:3000`
-
-#### Run as an Electron desktop app (optional)
-
-The Electron shell launches the Python backend + Next frontend together in a
-single window, with auto-update hooks wired against GitHub Releases. See
-[`docs/architecture/electron.md`](docs/architecture/electron.md) for the full
-three-process model, security posture, and packaging roadmap.
-
-```bash
-# one-time
-npm install
-npm --prefix frontend install
-
-# launches backend + next dev + electron, with coloured log streams
 npm run dev
 ```
 
-Packaged installers (Windows NSIS, macOS DMG, Linux AppImage) are produced by
-`npm run electron:build:win|mac|linux` — Python bundling via PyInstaller and
-Windows EV code-signing are tracked as follow-up PRs and are **not required
-for development use**.
-
-### API Endpoints
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/scan` | JWT | Queue a new scan job |
-| `GET` | `/api/scan/:id` | JWT | Poll scan job status/result |
-| `GET` | `/api/scans` | JWT | List user's last 10 scans |
-| `DELETE` | `/api/scans` | JWT | Clear user's local scan history |
-| `DELETE` | `/api/account` | JWT | Delete account + purge scan history |
-| `GET` | `/api/consent` | JWT | Check user consent status |
-| `POST` | `/api/consent` | JWT | Grant consent for advanced scans |
-| `DELETE` | `/api/consent` | JWT | Revoke consent |
-| `POST` | `/api/analyze` | — | Direct AI analysis (rate-limited) |
-| `POST` | `/api/settings/apikey` | JWT | Set per-user Gemini API key (Fernet-encrypted at rest) |
-| `GET` | `/api/setup/detect` | JWT | Detect installed native scan tools (Nmap / Npcap / TShark) |
-| `POST` | `/api/setup/license` | JWT | Record acceptance of bundled-tool licenses |
-| `POST` | `/api/setup/install` | JWT | Queue a native-dependency install job |
-| `GET` | `/api/setup/install/:job_id` | JWT | Poll install-job status |
-| `POST` | `/api/setup/install/:job_id/cancel` | JWT | Cancel a running install job |
-| `GET` | `/api/setup/jobs` | JWT | List recent install jobs |
-| `GET` | `/api/status` | JWT | Authenticated version probe (app version, scan-mode availability) |
-| `GET` | `/health` | — | Health check |
-
-> Interactive API docs available at `http://localhost:8000/docs` (Swagger UI)
+Then open http://localhost:3000.
 
 ---
 
-## ✨ Key Features
+## Production build (static export)
 
-- **🔍 Multi-Engine Scanning**: Nmap (port/service), Scapy (firewall), TShark (traffic capture)
-- **🛡️ Deterministic CVE Correlation**: CIRCL database with 247K+ real CVEs — zero AI hallucination at this stage
-- **🤖 AI-Powered Reports**: Gemini 2.5 Flash translates findings into executive-grade remediation playbooks
-- **🔒 Privacy by Architecture**: PII stripped before any external API call. Network topology never leaves unredacted.
-- **⚡ 3-Tier AI Caching**: Local SQLite → Global Supabase → Gemini API. Identical scans hit cache instantly.
-- **🔐 Supabase Auth**: Email/password + OAuth login with JWT-protected API routes
-- **📊 Real-Time Dashboard**: Scan progress, severity charts (Recharts), scan history with Supabase persistence
-- **🎮 Cyberpunk UI**: Custom design system — Syne typography, 3D particle backgrounds, terminal-style animations
-- **🛡️ Consent Management**: GDPR-style explicit consent with versioned policies, grant/revoke API
-- **⏱️ Async Job Queue**: Non-blocking scan execution via SQLite-backed FIFO queue with background worker
-
----
-
-## 🔌 API Usage Examples
-
-### Queue a Network Scan
 ```bash
-curl -X POST "http://localhost:8000/api/scan" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_SUPABASE_JWT" \
-  -d '{
-    "target": "192.168.1.1",
-    "scan_mode": "fast"
-  }'
+npm install
+npm run build
 ```
 
-### Response
-```json
-{
-  "scan_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "status": "queued",
-  "message": "Scan queued successfully"
-}
+The export lands in `./out/`. Upload that folder to any static host.
+
+---
+
+## Deploy on Vercel
+
+This repo includes a `vercel.json` so import is one click:
+
+1. **Add New Project → Import** `Kalpesh-ops/aegir`
+2. **Production Branch**: `live-demo-site`
+3. **Root Directory**: leave blank (this branch IS the site root)
+4. **Framework Preset**: Next.js (auto-detected)
+5. **Build Command**: `next build` (auto)
+6. **Output Directory**: `out` (auto, set by `vercel.json`)
+7. No environment variables required.
+
+Click **Deploy**.
+
+---
+
+## Project layout
+
+```
+.
+├── app/                    # Next.js App Router routes
+│   ├── page.jsx            # Landing page
+│   ├── login/              # No-auth "enter dashboard" gate
+│   ├── dashboard/          # Demo dashboard (mock data)
+│   │   ├── page.jsx
+│   │   ├── history/
+│   │   ├── scan/
+│   │   │   ├── page.jsx    # Scan form (submit → "desktop-only" modal)
+│   │   │   └── [id]/       # Per-scan results
+│   │   ├── settings/
+│   │   └── setup/          # Native-deps wizard preview
+│   └── legal/              # Public legal docs
+│       ├── privacy-policy/
+│       ├── terms-of-service/
+│       ├── consent-policy/
+│       └── disclaimer/
+├── components/             # Navbar / Footer / charts / etc.
+├── lib/
+│   └── demoData.js         # Mock scans + curated Metasploitable 2 record
+├── public/                 # Static assets (favicon)
+├── next.config.js          # output:'export', trailingSlash, image-unoptimized
+├── vercel.json             # Vercel build + security headers
+└── package.json
 ```
 
-### Poll Scan Status
-```bash
-curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
-  -H "Authorization: Bearer YOUR_SUPABASE_JWT"
-```
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](./LICENSE).
+
+The Aegir trademark and brand assets are not covered by the source license.
 
 ---
 
-## 🧰 Technology Stack
+## Links
 
-### Backend
-| Package | Version | Purpose |
-|---|---|---|
-| `fastapi` | 0.128.0 | Async REST API framework |
-| `uvicorn` | 0.46.0 | ASGI server |
-| `google-generativeai` | 0.8.6 | Gemini 2.5 Flash SDK |
-| `supabase` | 2.29.0 | Supabase Python client (auth, DB) |
-| `scapy` | 2.7.0 | Packet crafting & firewall detection |
-| `python-jose` | 3.5.0 | JWT token verification |
-| `pyjwt` | ≥2.12.1 | JWT decoding for Supabase middleware |
-| `cryptography` | ≥47.0.0 | Fernet encryption-at-rest for per-user keys |
-| `python-dotenv` | ≥1.2.2 | Environment variable management |
-| `requests` | ≥2.33.1 | HTTP client (CIRCL API) |
-| `slowapi` | 0.1.9 | Per-endpoint rate limiting |
-| `defusedxml` | ≥0.7.1 | Hardened Nmap XML parser |
-| `psutil` | ≥5.9.0 | Process management for backend supervisor |
-| `python-nmap` | ≥0.7.1 | Nmap wrapper |
-
-### Frontend
-| Package | Version | Purpose |
-|---|---|---|
-| `next` | 16.2.4 | React framework (App Router + Turbopack) |
-| `react` | 19.2.5 | UI library |
-| `@supabase/ssr` | ^0.9.0 | Server-side Supabase auth |
-| `@supabase/supabase-js` | 2.105.1 | Supabase client SDK |
-| `recharts` | 3.8.1 | Severity distribution charts |
-| `framer-motion` | 12.38.0 | UI animations |
-| `@react-three/fiber` | 9.5.0 | 3D particle background |
-| `@react-three/drei` | 10.7.7 | Three.js helpers |
-| `lucide-react` | 0.563.0 | Icon library |
-| `react-markdown` | 10.1.0 | AI report rendering |
-| `rehype-sanitize` | 6.0.0 | Markdown HTML sanitization |
-| `dompurify` | 3.4.1 | XSS sanitization |
-
-### Desktop Shell
-| Package | Version | Purpose |
-|---|---|---|
-| `electron` | 33.4.1 | Desktop runtime (Windows / macOS / Linux) |
-| `electron-builder` | 25.1.8 | NSIS / DMG / AppImage packaging |
-| `electron-updater` | 6.3.9 | GitHub-Releases auto-update channel |
-| `electron-log` | 5.2.3 | File-rotated logging for the main process |
-| `concurrently` | 9.1.2 | Dev orchestrator (backend + frontend + electron) |
-| `wait-on` | 8.0.5 | Block Electron until Next is ready |
-
-### External Services
-| Service | Purpose |
-|---|---|
-| **Google Gemini 2.5 Flash** | AI threat analysis engine (bring-your-own-key) |
-| **Supabase (PostgreSQL)** | Auth, scan history, global AI cache, consent |
-| **CIRCL CVE Database** | Public CVE lookup API (247K+ entries) |
-
----
-
-## 📦 Distribution & Deployment
-
-### Local-First Desktop Application
-
-Aegir is designed to run **on the user's own machine**. The reference distribution is the Electron desktop shell (`npm run dev` for development, `npm run electron:build:{win,mac,linux}` for packaged installers) — there is no hosted public scanner endpoint. This is intentional: the product runs scans against the operator's own private network, so the user always controls the execution boundary.
-
-| Layer | Where it runs | Notes |
-|---|---|---|
-| **Electron shell** | User machine | Single-window desktop UX wrapping Next + FastAPI |
-| **FastAPI backend** | User machine (localhost:8000) | Spawned and supervised by Electron |
-| **Next.js frontend** | User machine (localhost:3000) | Spawned and supervised by Electron |
-| **Supabase** | Managed (`*.supabase.co`) | Auth + scan-history persistence; RLS-enforced |
-| **Gemini API** | Managed (Google) | Reached only after PII redaction; user provides their own key |
-| **CIRCL API** | Public (`cve.circl.lu`) | Read-only CVE lookups; results cached locally for 7 days |
-
-### Security Hardening (applied to local-host backend)
-- **JWT Auth on every mutating endpoint** — Supabase RS256/HS256 verification, no token-bypass paths
-- **Target-IP allowlist** — `validators.py` only accepts loopback + RFC1918 private ranges
-- **Fernet encryption-at-rest** for per-user Gemini API keys (`src/utils/secrets.py`)
-- **CORS lockdown** — only localhost origins by default; extra origins must be opted-in via `EXTRA_CORS_ORIGINS`
-- **TrustedHost middleware** — bound to `ALLOWED_HOSTS` (defaults to loopback only)
-- **Body-size limit** — 256 KiB default JSON-body cap (configurable)
-- **Last-octet IP redaction in logs** (`src/utils/log_scrubber.py`)
-- **Hardened XML parser** — `defusedxml` for Nmap output (XXE-safe)
-- **Rate limiting** — `slowapi`: 5 scans/hour, 60 polls/min, 10 analyses/min per IP
-- **Static analysis in CI** — Bandit, pip-audit, Ruff
-- **No secrets in code** — all credentials via `.env` / `frontend/.env.local`, never committed
-
----
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a Pull Request.
-
----
-
-## 📧 Contact
-
-For questions, security disclosures, or support — please open an issue or see [SECURITY.md](SECURITY.md).
+- Main repo (source for the desktop app + CLI): https://github.com/Kalpesh-ops/aegir
+- License: https://github.com/Kalpesh-ops/aegir/blob/main/LICENSE
