@@ -20,8 +20,8 @@ branch.
 | Framework | Next.js 16 (App Router) |
 | Runtime | React 19 |
 | Language | JavaScript (JSX) |
-| Output | Static export (`output: 'export'`) |
-| Hosting | Any static host (Vercel · Cloudflare Pages · Netlify · S3 · GitHub Pages) |
+| Output | Standard Next.js build (every page SSG; emits static HTML at the edge on Vercel) |
+| Hosting | Vercel (recommended) — or any host that runs `next start` |
 | Charts | Recharts |
 | Markdown | react-markdown + rehype-sanitize |
 
@@ -40,14 +40,14 @@ Then open http://localhost:3000.
 
 ---
 
-## Production build (static export)
+## Production build
 
 ```bash
 npm install
 npm run build
 ```
 
-The export lands in `./out/`. Upload that folder to any static host.
+Vercel will run this automatically; the prerendered HTML lands in `./.next/`.
 
 ---
 
@@ -60,7 +60,7 @@ This repo includes a `vercel.json` so import is one click:
 3. **Root Directory**: leave blank (this branch IS the site root)
 4. **Framework Preset**: Next.js (auto-detected)
 5. **Build Command**: `next build` (auto)
-6. **Output Directory**: `out` (auto, set by `vercel.json`)
+6. **Output Directory**: `.next` (auto-detected — Vercel handles it)
 7. No environment variables required.
 
 Click **Deploy**.
@@ -91,7 +91,7 @@ Click **Deploy**.
 ├── lib/
 │   └── demoData.js         # Mock scans + curated Metasploitable 2 record
 ├── public/                 # Static assets (favicon)
-├── next.config.js          # output:'export', trailingSlash, image-unoptimized
+├── next.config.js          # trailingSlash, image-unoptimized
 ├── vercel.json             # Vercel build + security headers
 └── package.json
 ```
