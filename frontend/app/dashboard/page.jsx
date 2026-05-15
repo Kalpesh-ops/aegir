@@ -1,61 +1,40 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 import DashboardClient from '@/components/DashboardClient'
-import SetupBanner from '@/components/SetupBanner'
-import { scanCache } from '@/lib/localCache'
+import { DEMO_SCANS } from '@/lib/demoData'
 
-export const dynamic = 'force-dynamic'
-
-export default async function DashboardPage() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {}
-        },
-      },
-    }
-  )
-  
-  const { data: { session }, error } = await supabase.auth.getSession()
-    const user = session?.user
-
-  if (!user || error) {
-    redirect('/login')
-  }
-
-  // Use let, and ensure no other 'scans' variable exists in this function
-  let scans = scanCache.get(user.id, 50)
-
-  if (!scans) {
-    const { data } = await supabase
-      .from('scans')
-      .select('id, target_redacted, scan_timestamp, scan_mode, ports_json, cve_count, highest_cvss, crit_count, high_count, med_count, low_count')
-      .eq('user_id', user.id)
-      .order('scan_timestamp', { ascending: false })
-      .limit(50)
-      
-    scans = data || []
-    scanCache.set(user.id, 50, scans)
-  }
-
+export default function DashboardPage() {
   return (
     <>
-      <div className="px-6 pt-6 max-w-7xl mx-auto w-full">
-        <SetupBanner />
-      </div>
-      <DashboardClient scans={scans} />
+      <ShowcaseBanner />
+      <DashboardClient scans={DEMO_SCANS} />
     </>
+  )
+}
+
+function ShowcaseBanner() {
+  return (
+    <div style={{
+      maxWidth: '1280px',
+      margin: '0 auto 24px',
+      padding: '14px 20px',
+      border: '1px solid rgba(0,255,136,0.25)',
+      background: 'rgba(0,255,136,0.05)',
+      borderRadius: '6px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: '11px',
+      letterSpacing: '0.08em',
+      color: '#cfe8d8',
+    }}>
+      <span style={{
+        width: '8px',
+        height: '8px',
+        background: '#00ff88',
+        borderRadius: '50%',
+        boxShadow: '0 0 10px #00ff88',
+      }} />
+      SHOWCASE PREVIEW — All scan data on this page is illustrative. Live scanning is available in the desktop app.
+    </div>
   )
 }
