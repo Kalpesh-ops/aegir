@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
+import { API_URL } from '@/lib/apiUrl'
 
 const supabaseRef = { current: null }
 
@@ -27,7 +28,6 @@ function getSupabase() {
   return supabaseRef.current
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 async function checkConsent(token) {
   const res = await fetch(`${API_URL}/api/consent`, {
