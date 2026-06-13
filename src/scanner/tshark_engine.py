@@ -109,7 +109,7 @@ class TSharkScanner:
             pcap_filepath = os.path.join(self.output_dir, pcap_filename)
             
             logging.info(f"Starting TShark capture on {interface} for {duration}s...")
-            logging.info(f"Privacy constraint: Snapshot length = 80 bytes (headers only)")
+            logging.info("Privacy constraint: Snapshot length = 80 bytes (headers only)")
             
             # Build TShark command with privacy constraints
             # -s 80: Snapshot length = 80 bytes (headers only, NO payloads)

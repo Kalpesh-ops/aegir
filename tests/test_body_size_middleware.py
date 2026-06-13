@@ -4,7 +4,6 @@ from starlette.testclient import TestClient
 
 
 def _build_app():
-    import importlib
     import server as server_mod
 
     # Re-run `app.add_middleware` in a minimal way by using the module's class.

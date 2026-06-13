@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import sqlite3
 import hashlib
 from pathlib import Path
 from typing import List, Dict
