@@ -102,13 +102,13 @@ graph TB
 
 | Component | Technology | Purpose |
 |---|---|---|
-| **Framework** | Next.js 16 (Turbopack) | Server components, middleware auth, API rewrites |
+| **Framework** | Next.js 16 (Turbopack) | Server components, API rewrites, standalone output |
 | **UI Library** | React 19.2 | Modern hooks, client components |
-| **Auth** | Supabase SSR | Cookie-based session management with middleware guards |
-| **Visualization** | Recharts, React Three Fiber | Severity charts, 3D particle background |
+| **Auth** | Supabase SSR | Cookie-based sessions; route guards in `proxy.js` (Next 16 middleware) |
+| **Visualization** | Recharts | Severity distribution charts (pie + bar) |
+| **Background FX** | Canvas 2D | Custom particle field (`ParticleBackground.jsx`, no WebGL) |
 | **Styling** | Vanilla CSS | Custom cyberpunk design system (Syne + JetBrains Mono) |
-| **Animation** | Framer Motion | Page transitions, micro-interactions |
-| **Security** | DOMPurify | XSS sanitization for AI-generated markdown |
+| **Security** | rehype-sanitize | XSS sanitization for AI-generated markdown |
 
 ---
 
@@ -165,9 +165,9 @@ flowchart TD
 
 | Mode | Nmap Flags | Scapy | TShark | CVE Source | Est. Time |
 |---|---|---|---|---|---|
-| **Fast** | `-Pn -sT -F -sV` | ❌ | ❌ | CIRCL API | ~38s |
-| **Deep** | `-Pn -sT -sV --script=default` | ✅ Port 80 | ❌ | VulnChecker + CIRCL | ~105s |
-| **Pen Test** | `-Pn -sT -sV -p-` (all ports) | ✅ Port 445 | ✅ 30s capture | VulnChecker + CIRCL | ~225s |
+| **Fast** | `-Pn -sT -F -sV --version-intensity 0` | ❌ | ❌ | CIRCL API | ~38s |
+| **Deep** | `-Pn -sT -sV --version-intensity 5 --script=default` | ✅ Port 80 | ❌ | VulnChecker + CIRCL | ~105s |
+| **Pen Test** | `-Pn -sT -sV --version-intensity 9 -p-` (all ports) | ✅ Port 445 | ✅ 30s capture | VulnChecker + CIRCL | ~225s |
 
 ---
 
@@ -248,6 +248,8 @@ aegir/
 │
 ├── 📁 src/                              # Core Backend Source
 │   │
+│   ├── 📄 constants.py                  # Shared scan-mode + job-status enums
+│   │
 │   ├── 📁 auth/                         # 🔐 Authentication
 │   │   └── middleware.py                # Supabase JWT verification (ES256 JWKS)
 │   │
@@ -270,8 +272,7 @@ aegir/
 │   │
 │   ├── 📁 ai_agent/                     # 🤖 AI Analysis Engine
 │   │   ├── gemini_client.py             # Gemini 2.5: 3-tier cache, model fallback chain
-│   │   ├── prompts.py                   # System prompt: structured output format
-│   │   └── report_generator.py          # Report assembly
+│   │   └── prompts.py                   # System prompt: structured output format
 │   │
 │   ├── 📁 dependencies/                 # 📦 Native-Dependency Installer Wizard
 │   │   ├── detector.py                  # Detect Nmap / Npcap / TShark on PATH
@@ -310,8 +311,9 @@ aegir/
 │
 └── 📁 frontend/                         # Next.js 16 Frontend
     ├── 📄 package.json                  # Dependencies (React 19, Next 16, Supabase SSR)
-    ├── 📄 next.config.js                # API rewrites, security headers
-    ├── 📄 .env.example                  # Frontend env template
+    ├── 📄 next.config.js                # API rewrites, security headers, standalone output
+    ├── 📄 proxy.js                      # Route guards (Next 16 middleware): /dashboard → /login
+    ├── 📄 .env.example                  # Frontend env template (copy to .env.local)
     │
     ├── 📁 app/                          # Next.js App Router
     │   ├── layout.jsx                   # Root layout (Syne + JetBrains Mono fonts)
@@ -348,17 +350,19 @@ aegir/
     │   ├── DashboardClient.jsx          # Dashboard overview widget
     │   ├── ScanResultClient.jsx         # Full scan result renderer (ports, CVEs, AI)
     │   ├── HistoryClient.jsx            # Scan history table
+    │   ├── SetupBanner.jsx              # Missing-dependency banner (links to setup wizard)
     │   ├── SidebarNav.jsx               # Dashboard sidebar navigation
     │   ├── SidebarFooter.jsx            # Sidebar user info + logout
     │   ├── Navbar.jsx                   # Landing page navbar
     │   ├── Footer.jsx                   # Landing page footer
-    │   └── ParticleBackground.jsx       # Three.js 3D particle field
+    │   └── ParticleBackground.jsx       # Canvas 2D particle field
     │
     ├── 📁 hooks/                        # Custom React Hooks
     │   └── useScrollAnimation.js        # Scroll-triggered reveal animations
     │
     └── 📁 lib/                          # Utilities
-        └── localCache.js               # In-memory scan cache (15s TTL)
+        ├── apiUrl.js                    # Single source of truth for the backend base URL
+        └── localCache.js                # In-memory scan cache (30s TTL)
 ```
 
 ### Notes on Directory Structure
@@ -482,7 +486,7 @@ for development use**.
 | `GET` | `/api/consent` | JWT | Check user consent status |
 | `POST` | `/api/consent` | JWT | Grant consent for advanced scans |
 | `DELETE` | `/api/consent` | JWT | Revoke consent |
-| `POST` | `/api/analyze` | — | Direct AI analysis (rate-limited) |
+| `POST` | `/api/analyze` | JWT | Direct AI analysis (rate-limited) |
 | `POST` | `/api/settings/apikey` | JWT | Set per-user Gemini API key (Fernet-encrypted at rest) |
 | `GET` | `/api/setup/detect` | JWT | Detect installed native scan tools (Nmap / Npcap / TShark) |
 | `POST` | `/api/setup/license` | JWT | Record acceptance of bundled-tool licenses |
@@ -506,7 +510,7 @@ for development use**.
 - **⚡ 3-Tier AI Caching**: Local SQLite → Global Supabase → Gemini API. Identical scans hit cache instantly.
 - **🔐 Supabase Auth**: Email/password + OAuth login with JWT-protected API routes
 - **📊 Real-Time Dashboard**: Scan progress, severity charts (Recharts), scan history with Supabase persistence
-- **🎮 Cyberpunk UI**: Custom design system — Syne typography, 3D particle backgrounds, terminal-style animations
+- **🎮 Cyberpunk UI**: Custom design system — Syne typography, canvas particle background, terminal-style animations
 - **🛡️ Consent Management**: GDPR-style explicit consent with versioned policies, grant/revoke API
 - **⏱️ Async Job Queue**: Non-blocking scan execution via SQLite-backed FIFO queue with background worker
 
@@ -552,31 +556,26 @@ curl "http://localhost:8000/api/scan/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
 | `google-generativeai` | 0.8.6 | Gemini 2.5 Flash SDK |
 | `supabase` | 2.29.0 | Supabase Python client (auth, DB) |
 | `scapy` | 2.7.0 | Packet crafting & firewall detection |
-| `python-jose` | 3.5.0 | JWT token verification |
-| `pyjwt` | ≥2.12.1 | JWT decoding for Supabase middleware |
+| `pyjwt` | ≥2.12.1 | Supabase JWT verification (ES256 via JWKS) |
 | `cryptography` | ≥47.0.0 | Fernet encryption-at-rest for per-user keys |
 | `python-dotenv` | ≥1.2.2 | Environment variable management |
 | `requests` | ≥2.33.1 | HTTP client (CIRCL API) |
-| `slowapi` | 0.1.9 | Per-endpoint rate limiting |
 | `defusedxml` | ≥0.7.1 | Hardened Nmap XML parser |
-| `psutil` | ≥5.9.0 | Process management for backend supervisor |
+| `psutil` | ≥5.9.0 | Network-interface discovery for TShark capture |
 | `python-nmap` | ≥0.7.1 | Nmap wrapper |
+
+> Rate limiting is a custom in-memory sliding window (`server.py`) keyed per user — no extra dependency.
 
 ### Frontend
 | Package | Version | Purpose |
 |---|---|---|
 | `next` | 16.2.4 | React framework (App Router + Turbopack) |
 | `react` | 19.2.5 | UI library |
-| `@supabase/ssr` | ^0.9.0 | Server-side Supabase auth |
+| `@supabase/ssr` | 0.9.0 | Server-side Supabase auth |
 | `@supabase/supabase-js` | 2.105.1 | Supabase client SDK |
 | `recharts` | 3.8.1 | Severity distribution charts |
-| `framer-motion` | 12.38.0 | UI animations |
-| `@react-three/fiber` | 9.5.0 | 3D particle background |
-| `@react-three/drei` | 10.7.7 | Three.js helpers |
-| `lucide-react` | 0.563.0 | Icon library |
 | `react-markdown` | 10.1.0 | AI report rendering |
-| `rehype-sanitize` | 6.0.0 | Markdown HTML sanitization |
-| `dompurify` | 3.4.1 | XSS sanitization |
+| `rehype-sanitize` | 6.0.0 | Markdown HTML sanitization (XSS protection) |
 
 ### Desktop Shell
 | Package | Version | Purpose |
@@ -621,7 +620,7 @@ Aegir is designed to run **on the user's own machine**. The reference distributi
 - **Body-size limit** — 256 KiB default JSON-body cap (configurable)
 - **Last-octet IP redaction in logs** (`src/utils/log_scrubber.py`)
 - **Hardened XML parser** — `defusedxml` for Nmap output (XXE-safe)
-- **Rate limiting** — `slowapi`: 5 scans/hour, 60 polls/min, 10 analyses/min per IP
+- **Rate limiting** — in-memory sliding window, per user: 5 scans/hour, 120 polls/min, 10 analyses/min
 - **Static analysis in CI** — Bandit, pip-audit, Ruff
 - **No secrets in code** — all credentials via `.env` / `frontend/.env.local`, never committed
 
