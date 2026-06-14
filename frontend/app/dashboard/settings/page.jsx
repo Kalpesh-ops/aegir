@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { API_URL } from '@/lib/apiUrl'
 
 const supabaseRef = { current: null }
 function getSupabase() {
@@ -18,8 +19,6 @@ function getSupabase() {
   return supabaseRef.current
 }
 
-// CRITICAL FIX: Match FastAPI's binding exactly to prevent CORS/Networking drops
-const API_URL = 'http://127.0.0.1:8000'
 
 export default function SettingsPage() {
   const router = useRouter()

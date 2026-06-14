@@ -53,7 +53,7 @@ class VulnChecker:
                                 "version": version,
                                 "cve_id":  cve_id,
                                 "cvss":    None,
-                                "summary": f"Detected in nmap script output",
+                                "summary": "Detected in nmap script output",
                                 "source":  "nmap_script",
                             })
 

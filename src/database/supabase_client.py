@@ -62,11 +62,15 @@ def store_scan_result(
             cvss = float(cve.get("cvss", 0))
             if cvss > highest_cvss:
                 highest_cvss = cvss
-            
-            if cvss >= 9.0: crit_count += 1
-            elif cvss >= 7.0: high_count += 1
-            elif cvss >= 4.0: med_count += 1
-            elif cvss > 0: low_count += 1
+
+            if cvss >= 9.0:
+                crit_count += 1
+            elif cvss >= 7.0:
+                high_count += 1
+            elif cvss >= 4.0:
+                med_count += 1
+            elif cvss > 0:
+                low_count += 1
         except (ValueError, TypeError):
             pass
 
@@ -152,7 +156,7 @@ def store_global_cached_report(signature: str, report_text: str):
             "signature": signature,
             "report_text": report_text
         }).execute()
-        logger.info(f"[Supabase] Successfully pushed report to global cache")
+        logger.info("[Supabase] Successfully pushed report to global cache")
     except Exception as e:
         # If it fails (e.g., someone else inserted it at the exact same time), it's fine.
         logger.warning(f"[Supabase] Global cache write skipped/failed: {e}")

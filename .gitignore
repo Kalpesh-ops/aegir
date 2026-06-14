@@ -47,12 +47,22 @@ frontend/node_modules/
 # IDE / Editor
 .vscode/
 .idea/
+.obsidian/
 *.swp
 *.swo
 *~
 .project
 .pydevproject
 .settings/
+
+# Claude Code local config
+.claude/
+
+# Linter caches
+.ruff_cache/
+
+# Internal audit / planning docs (kept local, never published)
+review/
 
 # Logs
 logs/

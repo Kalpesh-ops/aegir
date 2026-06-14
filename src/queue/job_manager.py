@@ -5,6 +5,7 @@ import sqlite3
 import logging
 from datetime import datetime, timezone
 
+from src.constants import JobStatus, ScanMode
 from src.utils.sqlite_helpers import connect as sqlite_connect
 
 logging.basicConfig(
@@ -48,7 +49,7 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
-def create_job(user_id: str, target: str, scan_mode: str = "fast") -> str:
+def create_job(user_id: str, target: str, scan_mode: str = ScanMode.FAST.value) -> str:
     """
     Insert a new scan job with status "queued".
 
@@ -71,7 +72,7 @@ def create_job(user_id: str, target: str, scan_mode: str = "fast") -> str:
                 user_id,
                 target,
                 scan_mode,
-                "queued",
+                JobStatus.QUEUED.value,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -98,7 +99,7 @@ def get_next_job() -> dict | None:
         cursor = conn.execute(
             "SELECT job_id, user_id, target, scan_mode, status, created_at "
             "FROM scan_jobs WHERE status = ? ORDER BY created_at ASC LIMIT 1",
-            ("queued",),
+            (JobStatus.QUEUED.value,),
         )
         row = cursor.fetchone()
         conn.close()
@@ -108,7 +109,7 @@ def get_next_job() -> dict | None:
             "job_id": row[0],
             "user_id": row[1],
             "target": row[2],
-            "scan_mode": row[3] or "fast",
+            "scan_mode": row[3] or ScanMode.FAST.value,
             "status": row[4],
             "created_at": row[5],
         }
@@ -123,7 +124,7 @@ def mark_running(job_id: str) -> None:
         conn = _get_conn()
         conn.execute(
             "UPDATE scan_jobs SET status = ? WHERE job_id = ?",
-            ("running", job_id),
+            (JobStatus.RUNNING.value, job_id),
         )
         conn.commit()
         conn.close()
@@ -145,7 +146,7 @@ def mark_complete(job_id: str, result: dict) -> None:
         conn = _get_conn()
         conn.execute(
             "UPDATE scan_jobs SET status = ?, result_json = ? WHERE job_id = ?",
-            ("complete", json.dumps(result), job_id),
+            (JobStatus.COMPLETE.value, json.dumps(result), job_id),
         )
         conn.commit()
         conn.close()
@@ -167,7 +168,7 @@ def mark_failed(job_id: str, error: str) -> None:
         conn = _get_conn()
         conn.execute(
             "UPDATE scan_jobs SET status = ?, error_message = ? WHERE job_id = ?",
-            ("failed", error, job_id),
+            (JobStatus.FAILED.value, error, job_id),
         )
         conn.commit()
         conn.close()
@@ -208,7 +209,7 @@ def get_job_status(job_id: str) -> dict:
         return {
             "job_id": row[0],
             "user_id": row[1],
-            "scan_mode": row[2] or "fast",
+            "scan_mode": row[2] or ScanMode.FAST.value,
             "status": row[3],
             "result_json": result_json,
             "error_message": row[5],

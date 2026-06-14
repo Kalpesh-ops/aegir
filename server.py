@@ -12,7 +12,6 @@ import os
 import threading
 import time
 import uuid
-from enum import Enum
 from collections import defaultdict
 
 from fastapi import FastAPI, HTTPException, Request, Depends
@@ -26,12 +25,9 @@ import logging
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.scanner.nmap_engine import NmapScanner
-from src.scanner.scapy_engine import ScapyEngine
-from src.scanner.tshark_engine import TSharkScanner
+from src.constants import ScanMode
 from src.ai_agent.gemini_client import GeminiAgent
 from src.vuln_lookup.circl_client import CIRCLClient
-from src.utils.data_sanitizer import sanitize_scan_data  # noqa: F401  (public API)
 from src.utils.token_optimizer import prune_scan_data
 from src.utils.log_scrubber import install_scrubber
 from src.utils.validators import TargetValidationError, validate_target
@@ -215,47 +211,20 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# --- Engines (lazy singletons) ----------------------------------------------
-nmap_engine = NmapScanner()
-scapy_engine = ScapyEngine()
-tshark_engine = TSharkScanner()
+# --- Service singletons -------------------------------------------------------
+# Scanner engines (Nmap / Scapy / TShark) are owned by the background worker;
+# the API process only needs the AI agent (for /api/analyze and BYOK key
+# management) and a CIRCL client for the startup reachability probe.
 ai_agent = GeminiAgent()
 circl_client = CIRCLClient()
 logging.info(f"CIRCL API reachable: {circl_client.test_connection()}")
 
 
-class ScanMode(str, Enum):
-    fast = "fast"
-    deep = "deep"
-    pen_test = "pen_test"
-
-
-SCAN_PROFILES = {
-    "fast": {
-        "label": "Fast Scan",
-        "estimated_seconds": {"nmap": 30, "scapy": 0, "tshark": 0, "ai": 8, "total": 38},
-    },
-    "deep": {
-        "label": "Deep Scan",
-        "estimated_seconds": {"nmap": 90, "scapy": 3, "tshark": 0, "ai": 12, "total": 105},
-    },
-    "pen_test": {
-        "label": "Pen Testing Scan",
-        "estimated_seconds": {"nmap": 180, "scapy": 5, "tshark": 25, "ai": 15, "total": 225},
-    },
-}
-
-
 # --- Request models ---------------------------------------------------------
-class ScanRequest(BaseModel):
-    target: str
-    scan_mode: ScanMode = ScanMode.fast
-    use_xml: bool = False
-
-
 class ScanQueueRequest(BaseModel):
     target: str
-    scan_mode: ScanMode = ScanMode.fast
+    scan_mode: ScanMode = ScanMode.FAST
+    # Legacy alias: older clients sent ``scan_type`` instead of ``scan_mode``.
     scan_type: ScanMode | None = None
 
 

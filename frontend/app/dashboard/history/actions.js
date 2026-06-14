@@ -4,8 +4,8 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { scanCache } from '@/lib/localCache'
 import { revalidatePath } from 'next/cache'
+import { API_URL } from '@/lib/apiUrl'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // All page sizes used by the app. Keep in sync with any fetchScans() callers.
 const CACHE_PAGE_SIZES = [10, 25, 50, 100]

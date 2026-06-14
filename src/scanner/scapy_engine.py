@@ -60,9 +60,10 @@ class ScapyEngine:
             logging.error(f"Scapy scan failed: {e}")
             return {"error": "scapy_failure"}
 
-# --- TEST BLOCK ---
+# --- Manual smoke test ---
 if __name__ == "__main__":
-    # Windows Users: You might need to install Npcap for Scapy to work!
+    # Windows users: Npcap must be installed for Scapy raw sockets to work.
+    # Probe loopback only — the app's policy is private/loopback targets.
     scanner = ScapyEngine()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logging.info(scanner.firewall_detect("8.8.8.8", 53))  # Test against Google DNS
+    logging.info(scanner.firewall_detect("127.0.0.1", 80))

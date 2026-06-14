@@ -1,6 +1,7 @@
 import time
 import logging
 
+from src.constants import ScanMode
 from src.queue.job_manager import (
     get_next_job,
     mark_running,
@@ -35,6 +36,41 @@ def _flatten_cves(enriched_ports: list) -> list:
     return cve_findings
 
 
+def _merge_cves(primary: list, extra: list) -> list:
+    """
+    Merge two CVE lists, deduplicating by ``cve_id``.
+
+    Entries in ``primary`` win (VulnChecker results are richer than the bare
+    CIRCL port enrichment), so an ``extra`` entry is appended only when its
+    ``cve_id`` has not been seen yet.
+    """
+    seen = {c.get("cve_id") for c in primary if c.get("cve_id")}
+    merged = list(primary)
+    for cve in extra:
+        if cve.get("cve_id") not in seen:
+            merged.append(cve)
+            seen.add(cve.get("cve_id"))
+    return merged
+
+
+def _probe_firewall(target: str, port: int, scan_data: dict, label: str) -> dict:
+    """
+    Detect firewall behaviour with a Scapy ACK probe, falling back to Nmap
+    port-state inference when raw sockets are unavailable (no admin rights).
+    """
+    try:
+        scapy = ScapyEngine()
+        fw = scapy.firewall_detect(target, port=port)
+        if "error" in fw:
+            raise PermissionError(fw["error"])
+        fw["inference_method"] = "scapy_direct"
+        logging.info(f"[Worker][{label}] Scapy firewall result: {fw['firewall_status']}")
+        return fw
+    except Exception as e:
+        logging.warning(f"[Worker][{label}] Scapy failed ({e}), falling back to Nmap inference")
+        return _infer_firewall_from_nmap(scan_data, target)
+
+
 def _run_fast_pipeline(scanner, circl, target, xml_output):
     """
     FAST: nmap (quick flags) → CIRCL CVE enrichment → return
@@ -53,34 +89,14 @@ def _run_deep_pipeline(scanner, circl, target, xml_output, scan_data):
 
     # VulnChecker: Phase 1 (script output CVEs) + Phase 2 (CIRCL lookup)
     checker = VulnChecker()
-    script_and_circl_cves = checker.extract_cves(scan_data)
+    cve_findings = checker.extract_cves(scan_data)
 
-    # Also enrich via CIRCL directly for port-level data
+    # Also enrich via CIRCL directly for port-level data, then merge.
     enriched = circl.enrich_services(ports)
-    flat_cves = _flatten_cves(enriched)
+    cve_findings = _merge_cves(cve_findings, _flatten_cves(enriched))
 
-    # Merge: prefer VulnChecker results (richer), deduplicate by cve_id
-    seen = {c.get("cve_id") for c in script_and_circl_cves if c.get("cve_id")}
-    for c in flat_cves:
-        if c.get("cve_id") not in seen:
-            script_and_circl_cves.append(c)
-            seen.add(c.get("cve_id"))
-
-    # Scapy firewall probe with Nmap inference fallback
-    firewall_result = {}
-    try:
-        scapy = ScapyEngine()
-        fw = scapy.firewall_detect(target, port=80)
-        if "error" in fw:
-            raise PermissionError(fw["error"])
-        fw["inference_method"] = "scapy_direct"
-        firewall_result = fw
-        logging.info(f"[Worker][Deep] Scapy firewall result: {fw['firewall_status']}")
-    except Exception as e:
-        logging.warning(f"[Worker][Deep] Scapy failed ({e}), falling back to Nmap inference")
-        firewall_result = _infer_firewall_from_nmap(scan_data, target)
-
-    return enriched, script_and_circl_cves, {"firewall": firewall_result}
+    firewall_result = _probe_firewall(target, port=80, scan_data=scan_data, label="Deep")
+    return enriched, cve_findings, {"firewall": firewall_result}
 
 
 def _run_pen_test_pipeline(scanner, circl, target, xml_output, scan_data):
@@ -93,25 +109,10 @@ def _run_pen_test_pipeline(scanner, circl, target, xml_output, scan_data):
     cve_findings = checker.extract_cves(scan_data)
 
     enriched = circl.enrich_services(ports)
-    flat_cves = _flatten_cves(enriched)
-    seen = {c.get("cve_id") for c in cve_findings if c.get("cve_id")}
-    for c in flat_cves:
-        if c.get("cve_id") not in seen:
-            cve_findings.append(c)
-            seen.add(c.get("cve_id"))
+    cve_findings = _merge_cves(cve_findings, _flatten_cves(enriched))
 
-    # Scapy - probe SMB port for pen_test
-    firewall_result = {}
-    try:
-        scapy = ScapyEngine()
-        fw = scapy.firewall_detect(target, port=445)
-        if "error" in fw:
-            raise PermissionError(fw["error"])
-        fw["inference_method"] = "scapy_direct"
-        firewall_result = fw
-    except Exception as e:
-        logging.warning(f"[Worker][PenTest] Scapy failed ({e}), using Nmap inference")
-        firewall_result = _infer_firewall_from_nmap(scan_data, target)
+    # Probe the SMB port — the most security-relevant target for pen_test.
+    firewall_result = _probe_firewall(target, port=445, scan_data=scan_data, label="PenTest")
 
     # TShark — 30s capture, auto-detects interface from target subnet
     tshark_result = {}
@@ -171,7 +172,7 @@ def run_worker() -> None:
 
             job_id = job["job_id"]
             target = job["target"]
-            scan_mode = job.get("scan_mode") or "fast"
+            scan_mode = job.get("scan_mode") or ScanMode.FAST.value
             logging.info(f"[Worker] Job {job_id} | target={target} | mode={scan_mode}")
 
             mark_running(job_id)
@@ -190,11 +191,11 @@ def run_worker() -> None:
                 scan_data = scan_result.get("data", {})
 
                 # --- Mode-aware pipeline ---
-                if scan_mode == "deep":
+                if scan_mode == ScanMode.DEEP.value:
                     enriched, cve_findings, extra = _run_deep_pipeline(
                         scanner, circl, target, xml_output, scan_data
                     )
-                elif scan_mode == "pen_test":
+                elif scan_mode == ScanMode.PEN_TEST.value:
                     enriched, cve_findings, extra = _run_pen_test_pipeline(
                         scanner, circl, target, xml_output, scan_data
                     )
